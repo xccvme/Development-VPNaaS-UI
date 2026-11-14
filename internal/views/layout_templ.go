@@ -1354,43 +1354,56 @@ func Login(errMsg, username string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 99, "<body class=\"grid min-h-screen place-items-center bg-gradient-to-b from-[#2C3E87] to-[#3A55A6] px-4\"><main class=\"w-full max-w-sm rounded-xl bg-white p-8 shadow-xl\"><div class=\"mb-6 flex items-center gap-3\"><span class=\"grid h-10 w-10 place-items-center rounded-lg bg-[#2F6BC4] font-bold text-white\">V</span><div><h1 class=\"text-xl font-bold\">VPNaaS Console</h1><p class=\"text-sm text-[#6C757D]\">Masuk untuk mengelola VPN</p></div></div><form id=\"login-form\" method=\"post\" action=\"/login\" class=\"space-y-4\"><label class=\"block text-sm font-semibold\">Username <input name=\"username\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 99, "<body class=\"grid min-h-screen place-items-center bg-gradient-to-b from-[#2C3E87] to-[#3A55A6] px-4\"><main class=\"w-full max-w-sm rounded-xl bg-white p-8 shadow-xl\"><div class=\"mb-6 flex items-center gap-3\"><img src=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var66 string
-		templ_7745c5c3_Var66, templ_7745c5c3_Err = templruntime.NewAttributeExpression(username).Resolve(ctx)
+		templ_7745c5c3_Var66, templ_7745c5c3_Err = templruntime.NewAttributeExpression("/static/vpn-logo.png?v=" + AssetVersion).ResolveURL(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/layout.templ`, Line: 249, Col: 45}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/layout.templ`, Line: 240, Col: 56}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var66)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 100, "\" required autocomplete=\"username\" class=\"mt-1 w-full rounded-md border border-[#CED4DA] px-3 py-2 font-normal focus:border-[#2F6BC4] focus:outline-none focus:ring-2 focus:ring-[#2F6BC4]/20\"></label> <label class=\"block text-sm font-semibold\">Password <input name=\"password\" type=\"password\" required autocomplete=\"current-password\" class=\"mt-1 w-full rounded-md border border-[#CED4DA] px-3 py-2 font-normal focus:border-[#2F6BC4] focus:outline-none focus:ring-2 focus:ring-[#2F6BC4]/20\"></label> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 100, "\" alt=\"Logo VPNaaS\" width=\"44\" height=\"44\" class=\"h-11 w-11 shrink-0 object-contain\"><div><h1 class=\"text-xl font-bold\">VPNaaS Console</h1><p class=\"text-sm text-[#6C757D]\">Masuk untuk mengelola VPN</p></div></div><form id=\"login-form\" method=\"post\" action=\"/login\" class=\"space-y-4\"><label class=\"block text-sm font-semibold\">Username <input name=\"username\" value=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var67 string
+		templ_7745c5c3_Var67, templ_7745c5c3_Err = templruntime.NewAttributeExpression(username).Resolve(ctx)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/layout.templ`, Line: 249, Col: 45}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var67)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 101, "\" required autocomplete=\"username\" class=\"mt-1 w-full rounded-md border border-[#CED4DA] px-3 py-2 font-normal focus:border-[#2F6BC4] focus:outline-none focus:ring-2 focus:ring-[#2F6BC4]/20\"></label> <label class=\"block text-sm font-semibold\">Password <input name=\"password\" type=\"password\" required autocomplete=\"current-password\" class=\"mt-1 w-full rounded-md border border-[#CED4DA] px-3 py-2 font-normal focus:border-[#2F6BC4] focus:outline-none focus:ring-2 focus:ring-[#2F6BC4]/20\"></label> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if errMsg != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 101, "<p class=\"text-sm text-[#B3261E]\" role=\"alert\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 102, "<p class=\"text-sm text-[#B3261E]\" role=\"alert\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var67 string
-			templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(errMsg)
+			var templ_7745c5c3_Var68 string
+			templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(errMsg)
 			if templ_7745c5c3_Err != nil {
 				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/layout.templ`, Line: 256, Col: 61}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 102, "</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 103, "</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 103, "<button type=\"submit\" class=\"w-full rounded-full bg-[#2F6BC4] px-5 py-2.5 font-semibold text-white hover:bg-[#2559A8]\">Masuk</button><p class=\"text-center text-xs text-[#6C757D]\">Login PoC: admin / admin</p></form></main></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 104, "<button type=\"submit\" class=\"w-full rounded-full bg-[#2F6BC4] px-5 py-2.5 font-semibold text-white hover:bg-[#2559A8]\">Login</button></form></main></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

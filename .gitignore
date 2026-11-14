@@ -4,5 +4,6 @@ bin/
 !.env.example
 .session*
 *.key
+secrets/
 __pycache__/
 evidence/

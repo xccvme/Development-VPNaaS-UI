@@ -237,7 +237,7 @@ templ Login(errMsg, username string) {
 		<body class="grid min-h-screen place-items-center bg-gradient-to-b from-[#2C3E87] to-[#3A55A6] px-4">
 			<main class="w-full max-w-sm rounded-xl bg-white p-8 shadow-xl">
 				<div class="mb-6 flex items-center gap-3">
-					<span class="grid h-10 w-10 place-items-center rounded-lg bg-[#2F6BC4] font-bold text-white">V</span>
+					<img src={ "/static/vpn-logo.png?v=" + AssetVersion } alt="Logo VPNaaS" width="44" height="44" class="h-11 w-11 shrink-0 object-contain"/>
 					<div>
 						<h1 class="text-xl font-bold">VPNaaS Console</h1>
 						<p class="text-sm text-[#6C757D]">Masuk untuk mengelola VPN</p>
@@ -255,8 +255,7 @@ templ Login(errMsg, username string) {
 					if errMsg != "" {
 						<p class="text-sm text-[#B3261E]" role="alert">{ errMsg }</p>
 					}
-					<button type="submit" class="w-full rounded-full bg-[#2F6BC4] px-5 py-2.5 font-semibold text-white hover:bg-[#2559A8]">Masuk</button>
-					<p class="text-center text-xs text-[#6C757D]">Login PoC: admin / admin</p>
+					<button type="submit" class="w-full rounded-full bg-[#2F6BC4] px-5 py-2.5 font-semibold text-white hover:bg-[#2559A8]">Login</button>
 				</form>
 			</main>
 		</body>

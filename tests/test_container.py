@@ -8,6 +8,20 @@ class ContainerTest(unittest.TestCase):
   self.assertIn('read_only: true',text)
   self.assertIn('ui-state:/var/lib/vpnaas-ui',text)
   self.assertFalse((ROOT/'install.sh').exists())
+ def test_windows_opt_in_host_network_and_tunnel_defaults(self):
+  text=(ROOT/'compose.windows.yaml').read_text()
+  self.assertIn('network_mode: host',text)
+  self.assertIn('127.0.0.1:18000',text)
+  self.assertIn('127.0.0.1:8080',text)
+  self.assertIn('./secrets/backend-api.key',text)
+  self.assertIn('create_host_path: false',text)
+  self.assertNotIn('      network: host',text)
+  self.assertNotIn('ports:',text)
+ def test_secret_files_excluded(self):
+  for filename in ['.gitignore','.dockerignore']:
+   text=(ROOT/filename).read_text()
+   self.assertIn('*.key',text)
+   self.assertIn('secrets/',text)
  def test_multistage_no_source_secrets(self):
   text=(ROOT/'Dockerfile').read_text()
   self.assertIn('golang:1.27.4',text)

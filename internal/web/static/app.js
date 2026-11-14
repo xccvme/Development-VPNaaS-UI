@@ -49,17 +49,18 @@
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
-  // Native popover top-layer avoids clipping by the horizontally scrolling table.
-  let actions = null, pinned = false, closeTimer = null, suppressFocus = false;
+  // Row action menus (/akun, /koneksi): click-only. Native popover top-layer
+  // avoids clipping by the horizontally scrolling table. Closes on outside
+  // click, Escape, item selection, scroll/resize and HTMX swaps.
+  let actions = null;
   function menuOf(root) { return root.querySelector('[role="menu"]'); }
   function closeActions(restore) {
-    clearTimeout(closeTimer);
     if (!actions) return;
     const root = actions, button = root.querySelector('[data-actions-toggle]'), menu = menuOf(root);
-    actions = null; pinned = false;
+    actions = null;
     button.setAttribute('aria-expanded', 'false');
     if (menu.matches(':popover-open')) menu.hidePopover();
-    if (restore) { suppressFocus = true; button.focus(); suppressFocus = false; }
+    if (restore && button.isConnected) button.focus();
   }
   function positionActions() {
     if (!actions || !actions.isConnected) { closeActions(false); return; }
@@ -69,50 +70,39 @@
     const below = r.bottom + 2;
     menu.style.top = Math.max(8, below + h <= window.innerHeight - 8 ? below : r.top - h - 2) + 'px';
   }
-  function openActions(root) {
-    clearTimeout(closeTimer);
-    if (actions !== root) { closeActions(false); actions = root; }
+  function openActions(root, focusFirst) {
+    closeActions(false);
+    actions = root;
     const button = root.querySelector('[data-actions-toggle]'), menu = menuOf(root);
     if (!menu.matches(':popover-open')) menu.showPopover();
     button.setAttribute('aria-expanded', 'true');
     positionActions();
+    if (focusFirst) { const first = menu.querySelector('[role="menuitem"]'); if (first) first.focus(); }
   }
-  document.addEventListener('pointerover', (e) => {
-    if (e.pointerType !== 'mouse') return;
-    const root = e.target.closest('[data-account-actions]');
-    if (root) openActions(root);
-  });
-  document.addEventListener('pointerout', (e) => {
-    const root = e.target.closest('[data-account-actions]');
-    if (root && !root.contains(e.relatedTarget) && !pinned && !root.contains(document.activeElement)) {
-      closeTimer = setTimeout(() => closeActions(false), 180);
-    }
-  });
-  document.addEventListener('focusin', (e) => {
-    const root = e.target.closest('[data-account-actions]');
-    if (root && !suppressFocus) openActions(root);
-    else if (!root) closeActions(false);
-  });
   document.addEventListener('click', (e) => {
-    const root = e.target.closest('[data-account-actions]');
-    if (e.target.closest('[data-actions-toggle]')) {
-      if (actions === root && pinned) closeActions(false);
-      else { openActions(root); pinned = true; }
-    } else if (!root || e.target.closest('[role="menuitem"]')) closeActions(false);
+    if (!(e.target instanceof Element)) return;
+    const toggle = e.target.closest('[data-actions-toggle]');
+    if (toggle) {
+      const root = toggle.closest('[data-row-actions]');
+      if (actions === root) closeActions(false); else openActions(root, e.detail === 0);
+      return;
+    }
+    if (!actions) return;
+    if (!actions.contains(e.target) || e.target.closest('[role="menuitem"]')) closeActions(false);
   });
   document.addEventListener('keydown', (e) => {
     if (!actions) return;
-    if (e.key === 'Escape') { e.preventDefault(); closeActions(true); return; }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeActions(true); return; }
+    if (e.key === 'Tab') { closeActions(false); return; }
     const items = Array.from(menuOf(actions).querySelectorAll('[role="menuitem"]'));
     const index = items.indexOf(document.activeElement);
     if (['ArrowDown','ArrowUp','Home','End'].includes(e.key)) {
-      e.preventDefault(); pinned = true;
+      e.preventDefault();
       const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (index + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
       items[next].focus();
     }
-  });
-  // Scrolling / resizing closes the menu rather than leaving it detached from its row.
+  }, true);
   window.addEventListener('resize', () => closeActions(false));
-  document.addEventListener('scroll', () => closeActions(false), true);
+  document.addEventListener('scroll', (e) => { if (!actions || !menuOf(actions).contains(e.target)) closeActions(false); }, true);
   document.addEventListener('htmx:beforeSwap', () => closeActions(false));
 })();

@@ -111,6 +111,15 @@ func (f Form) E(k string) string {
 }
 func (f Form) Edit() bool { return f.ID > 0 }
 
+// maxSessionsValue is the selected limit; missing/invalid values show 3.
+func maxSessionsValue(f Form) string {
+	switch v := f.V("max_sessions"); v {
+	case "1", "2", "3":
+		return v
+	}
+	return strconv.Itoa(forms.DefaultMaxSessions)
+}
+
 type Confirm struct {
 	Title, Message, Name, URL, Button string
 	Err                               string

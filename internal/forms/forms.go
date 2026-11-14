@@ -12,6 +12,9 @@ import (
 
 const DefaultLAN = "10.10.7.0/24"
 
+// DefaultMaxSessions is the concurrent session limit used when none is chosen.
+const DefaultMaxSessions = 3
+
 var (
 	safeRe       = regexp.MustCompile(`^[A-Za-z0-9_@.:-]{1,128}$`)
 	credentialRe = regexp.MustCompile(`^[A-Za-z0-9_@.!+,:/=-]{8,128}$`)
@@ -80,9 +83,25 @@ func User(v url.Values, create bool) (map[string]any, Errors) {
 		errs["traffic_mode"] = "Mode trafik harus split atau full"
 	}
 	body["traffic_mode"] = mode
+	if raw, present := v["max_sessions"]; present || create {
+		ms := ""
+		if present {
+			ms = strings.TrimSpace(raw[0])
+		}
+		switch ms {
+		case "":
+			body["max_sessions"] = DefaultMaxSessions
+		case "1", "2", "3":
+			body["max_sessions"] = int(ms[0] - '0')
+		default:
+			errs["max_sessions"] = "Maks. koneksi bersamaan harus 1, 2, atau 3"
+		}
+	}
+	// Empty allowed CIDRs are omitted so the backend applies its LAN default
+	// (create) or keeps the stored value (edit).
 	cidrs := SplitList(v.Get("allowed_cidrs"))
 	if len(cidrs) == 0 {
-		cidrs = []string{DefaultLAN}
+		return body, errs
 	}
 	if len(cidrs) > 16 {
 		errs["allowed_cidrs"] = "Maksimal 16 CIDR"

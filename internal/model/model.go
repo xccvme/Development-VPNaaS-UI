@@ -33,6 +33,7 @@ type User struct {
 	TrafficMode   string    `json:"traffic_mode"`
 	RuntimeStatus string    `json:"runtime_status"`
 	SessionCount  *int      `json:"session_count"`
+	MaxSessions   *int      `json:"max_sessions"`
 	VirtualIPs    []string  `json:"virtual_ips"`
 	Sessions      []Session `json:"sessions"`
 }
@@ -56,11 +57,24 @@ func (u User) RuntimeLabel() string {
 	return "Unknown"
 }
 
+// DefaultMaxSessions applies when the backend omits max_sessions or returns
+// a value outside the supported 1..3 range.
+const DefaultMaxSessions = 3
+
+// Limit is the per-user concurrent session limit (1..3, default 3).
+func (u User) Limit() int {
+	if u.MaxSessions == nil || *u.MaxSessions < 1 || *u.MaxSessions > 3 {
+		return DefaultMaxSessions
+	}
+	return *u.MaxSessions
+}
+
+// SessionLabel renders "count/max", e.g. 0/3; Unknown when runtime is unknown.
 func (u User) SessionLabel() string {
 	if u.SessionCount == nil || u.RuntimeLabel() == "Unknown" {
 		return "Unknown"
 	}
-	return strconv.Itoa(*u.SessionCount)
+	return strconv.Itoa(*u.SessionCount) + "/" + strconv.Itoa(u.Limit())
 }
 
 func (u User) TrafficLabel() string {

@@ -3,7 +3,6 @@ package views
 import "vpnaas/ui-goth/internal/model"
 
 // ---------- shared form pieces ----------
-
 templ Modal(title string) {
 	<div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#212529]/40 px-4 py-10" data-modal>
 		<div class="w-full max-w-lg rounded-xl bg-white shadow-2xl" role="dialog" aria-modal="true" aria-label={ title }>
@@ -108,7 +107,6 @@ templ emptyOrNoMatch(total int, hasErr bool, title, detail string) {
 }
 
 // ---------- Koneksi S2S ----------
-
 templ ConnectionsPage(t ConnTable) {
 	@PageHeader("Koneksi Site-to-Site", "Konfigurasi dan operasikan tunnel IPsec IKEv2 antar jaringan.", PrimaryButton("Buat Koneksi", "/koneksi/baru"))
 	@VPNTabs("koneksi")
@@ -162,13 +160,7 @@ templ ConnectionsTable(t ConnTable) {
 									@Badge(c.Runtime)
 								</td>
 								<td class="px-3 py-3">
-<div class="flex min-w-[240px] max-w-[320px] flex-wrap gap-1.5">
- @rowBtn("Ubah", "get", idURL("/koneksi", c.ID, "/ubah"), "#modal", false)
- <button type="button" hx-post={ idURL("/koneksi", c.ID, "/initiate") } hx-target="#conn-table" hx-swap="outerHTML" class="whitespace-nowrap rounded-full border border-[#CED4DA] px-2.5 py-1 text-xs font-semibold text-[#1E7B34] hover:bg-[#E6F4EA]">Initiate</button>
- @rowBtn("Terminate", "get", idURL("/koneksi", c.ID, "/terminate"), "#modal", true)
- @rowBtn("Hapus", "get", idURL("/koneksi", c.ID, "/hapus"), "#modal", true)
- </div>
-
+									@connectionActions(c)
 								</td>
 							</tr>
 						}
@@ -204,7 +196,6 @@ templ ConnectionForm(f Form) {
 }
 
 // ---------- Akun C2S ----------
-
 templ UsersPage(t UserTable) {
 	@PageHeader("Akun Client-to-Site", "Kelola identitas remote access, izin jaringan, dan profil klien.", PrimaryButton("Buat Akun", "/akun/baru"))
 	@VPNTabs("akun")
@@ -255,10 +246,10 @@ templ UsersTable(t UserTable) {
 									@Badge(u.RuntimeLabel())
 								</td>
 								<td class="px-3 py-3">
-                                    <div class="flex items-center gap-3">
-                                     <span>{ u.SessionLabel() }</span>
-                                     @rowBtn("Detail", "get", idURL("/akun", u.ID, "/sesi"), "#modal", false)
-                                    </div>
+									<div class="flex items-center gap-3">
+										<span>{ u.SessionLabel() }</span>
+										@rowBtn("Detail", "get", idURL("/akun", u.ID, "/sesi"), "#modal", false)
+									</div>
 								</td>
 								<td class="px-3 py-3 font-mono">{ model.Join(u.VirtualIPs) }</td>
 								<td class="px-3 py-3">
@@ -271,34 +262,33 @@ templ UsersTable(t UserTable) {
 			</div>
 		}
 	</section>
-
 }
 
 templ UserSessions(u model.User, errMsg string) {
- @Modal("Detail Sesi") {
-  @ErrorBox(errMsg)
-  if errMsg == "" {
-   <p class="mb-4 text-sm font-semibold">{ u.Username } · ID { itoa(u.ID) } · { u.RuntimeLabel() }</p>
-   if len(u.Sessions) == 0 {
-    <p class="text-sm text-[#6C757D]">Tidak ada sesi aktif.</p>
-   }
-   <div class="max-h-96 space-y-3 overflow-y-auto">
-   for _, s := range u.Sessions {
-    <div class="rounded-lg bg-[#F8F9FA] p-3 font-mono text-xs break-words">
-     <div>IKE #{ s.IKEID } · { s.IKEState }</div>
-     <div>dari { s.RemoteAddress }</div>
-     <div>VIP { model.Join(s.VirtualIPs) }</div>
-     for _, c := range s.Children {
-      <div class="mt-2">CHILD #{ c.ChildID } · { c.State } · in { model.Bytes(c.BytesIn) } · out { model.Bytes(c.BytesOut) }</div>
-     }
-    </div>
-   }
-   </div>
-  }
-  <div class="mt-5 flex justify-end border-t border-[#DEE2E6] pt-4">
-   <button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Tutup</button>
-  </div>
- }
+	@Modal("Detail Sesi") {
+		@ErrorBox(errMsg)
+		if errMsg == "" {
+			<p class="mb-4 text-sm font-semibold">{ u.Username } · ID { itoa(u.ID) } · { u.RuntimeLabel() } · Sesi { u.SessionLabel() }</p>
+			if len(u.Sessions) == 0 {
+				<p class="text-sm text-[#6C757D]">Tidak ada sesi aktif.</p>
+			}
+			<div class="max-h-96 space-y-3 overflow-y-auto">
+				for _, s := range u.Sessions {
+					<div class="rounded-lg bg-[#F8F9FA] p-3 font-mono text-xs break-words">
+						<div>IKE #{ s.IKEID } · { s.IKEState }</div>
+						<div>dari { s.RemoteAddress }</div>
+						<div>VIP { model.Join(s.VirtualIPs) }</div>
+						for _, c := range s.Children {
+							<div class="mt-2">CHILD #{ c.ChildID } · { c.State } · in { model.Bytes(c.BytesIn) } · out { model.Bytes(c.BytesOut) }</div>
+						}
+					</div>
+				}
+			</div>
+		}
+		<div class="mt-5 flex justify-end border-t border-[#DEE2E6] pt-4">
+			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Tutup</button>
+		</div>
+	}
 }
 
 templ UserForm(f Form) {
@@ -321,45 +311,81 @@ templ UserForm(f Form) {
 			}
 			<label class="block text-sm font-semibold">
 				Allowed CIDRs
-				<textarea name="allowed_cidrs" rows="3" class={ inputClass(f.E("allowed_cidrs")) + " font-mono" }>{ f.V("allowed_cidrs") }</textarea>
-				<span class="mt-1 block text-xs font-normal text-[#6C757D]">Satu CIDR per baris atau dipisah koma. Kosong = 10.10.7.0/24.</span>
+				<textarea name="allowed_cidrs" rows="3" placeholder="10.10.7.0/24" class={ inputClass(f.E("allowed_cidrs")) + " font-mono" }>{ f.V("allowed_cidrs") }</textarea>
+				<span class="mt-1 block text-xs font-normal text-[#6C757D]">Satu CIDR per baris atau dipisah koma. Kosongkan untuk memakai jaringan LAN default backend.</span>
 				if f.E("allowed_cidrs") != "" {
 					<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("allowed_cidrs") }</span>
 				}
 			</label>
 			@trafficMode(f)
+			@maxSessions(f)
 			@enabledBox(f.Enabled)
 			@formFooter(ternary(f.Edit(), "Simpan", "Buat"))
 		</form>
 	}
 }
 
+templ maxSessions(f Form) {
+	<label class="block text-sm font-semibold">
+		Maks. koneksi bersamaan
+		<select name="max_sessions" class={ inputClass(f.E("max_sessions")) }>
+			for _, n := range []string{"1", "2", "3"} {
+				<option value={ n } selected?={ maxSessionsValue(f) == n }>{ n }</option>
+			}
+		</select>
+		<span class="mt-1 block text-xs font-normal text-[#6C757D]">Jumlah perangkat yang boleh terhubung bersamaan dengan akun ini (1–3, default 3).</span>
+		if f.E("max_sessions") != "" {
+			<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("max_sessions") }</span>
+		}
+	</label>
+}
+
 templ trafficMode(f Form) {
- <fieldset class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
- <legend class="px-1 text-sm font-semibold">Mode trafik</legend>
- <select name="traffic_mode" aria-label="Mode trafik" class={ inputClass(f.E("traffic_mode")) }>
- <option value="split" selected?={ f.V("traffic_mode") != "full" }>Split tunnel (default)</option>
- <option value="full" selected?={ f.V("traffic_mode") == "full" }>Full tunnel</option>
- </select>
- <p class="text-xs text-[#6C757D]">Split: hanya jaringan diizinkan lewat VPN (default). Full: semua internet lewat server; akses LAN tetap dibatasi allowed CIDRs. Unduh ulang profil / Setup Windows lalu sambungkan ulang setelah mengubah mode.</p>
- if f.E("traffic_mode") != "" {
- <p class="text-xs text-[#B3261E]">{ f.E("traffic_mode") }</p>
- }
- </fieldset>
+	<fieldset class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
+		<legend class="px-1 text-sm font-semibold">Mode trafik</legend>
+		<select name="traffic_mode" aria-label="Mode trafik" class={ inputClass(f.E("traffic_mode")) }>
+			<option value="split" selected?={ f.V("traffic_mode") != "full" }>Split tunnel (default)</option>
+			<option value="full" selected?={ f.V("traffic_mode") == "full" }>Full tunnel</option>
+		</select>
+		<p class="text-xs text-[#6C757D]">Split: hanya jaringan diizinkan lewat VPN (default). Full: semua internet lewat server; akses LAN tetap dibatasi allowed CIDRs. Unduh ulang profil / Setup Windows lalu sambungkan ulang setelah mengubah mode.</p>
+		if f.E("traffic_mode") != "" {
+			<p class="text-xs text-[#B3261E]">{ f.E("traffic_mode") }</p>
+		}
+	</fieldset>
+}
+
+// rowActions is the shared row action menu for /akun and /koneksi: a plain
+// vertical three-dot toggle; options live in a manual popover that app.js
+// opens on click only and closes on outside click, Escape or selection.
+templ rowActions(menuID, name string) {
+	<div data-row-actions>
+		<button type="button" data-actions-toggle aria-label={ "Aksi untuk " + name } aria-haspopup="menu" aria-expanded="false" aria-controls={ menuID } class="kebab-button">
+			<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg>
+		</button>
+		<div id={ menuID } class="action-menu" role="menu" aria-label={ "Aksi " + name } popover="manual">
+			{ children... }
+		</div>
+	</div>
 }
 
 templ accountActions(u model.User) {
- <div data-account-actions>
- <button type="button" data-actions-toggle aria-label={ "Aksi untuk " + u.Username } aria-haspopup="menu" aria-expanded="false" aria-controls={ "account-menu-" + itoa(u.ID) } class="kebab-button">⋮</button>
- <div id={ "account-menu-" + itoa(u.ID) } class="account-menu" role="menu" aria-label={ "Aksi " + u.Username } popover="manual">
- <button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/ubah") } hx-target="#modal">Ubah</button>
- <button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/password") } hx-target="#modal">Password</button>
- <a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/profil.json")) } download title="Profil berisi kredensial; simpan dengan aman">Profil VPN (.json)</a>
- <a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/windows.ps1")) } download>Setup-Client(windows).ps1</a>
- <a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/vpnaas-ca.crt")) } download>Download Sertifikat (.crt)</a>
- <button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/akun", u.ID, "/hapus") } hx-target="#modal">Hapus</button>
- </div>
- </div>
+	@rowActions("account-menu-"+itoa(u.ID), u.Username) {
+		<button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/ubah") } hx-target="#modal">Ubah</button>
+		<button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/password") } hx-target="#modal">Password</button>
+		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/profil.json")) } download title="Profil berisi kredensial; simpan dengan aman">Profil VPN (.json)</a>
+		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/windows.ps1")) } download>Setup-Client(windows).ps1</a>
+		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/vpnaas-ca.crt")) } download>Download Sertifikat (.crt)</a>
+		<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/akun", u.ID, "/hapus") } hx-target="#modal">Hapus</button>
+	}
+}
+
+templ connectionActions(c ConnRow) {
+	@rowActions("connection-menu-"+itoa(c.ID), c.Name) {
+		<button type="button" role="menuitem" hx-get={ idURL("/koneksi", c.ID, "/ubah") } hx-target="#modal">Ubah</button>
+		<button type="button" role="menuitem" hx-post={ idURL("/koneksi", c.ID, "/initiate") } hx-target="#conn-table" hx-swap="outerHTML">Initiate</button>
+		<button type="button" role="menuitem" hx-get={ idURL("/koneksi", c.ID, "/terminate") } hx-target="#modal">Terminate</button>
+		<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/koneksi", c.ID, "/hapus") } hx-target="#modal">Hapus</button>
+	}
 }
 
 templ PasswordForm(id int, username, errMsg, fieldErr string) {
@@ -375,7 +401,6 @@ templ PasswordForm(id int, username, errMsg, fieldErr string) {
 }
 
 // ---------- Kebijakan ----------
-
 templ PoliciesPage(t PolicyTable) {
 	@PageHeader("Kebijakan Jaringan", "Tentukan trafik yang diizinkan melewati jaringan privat. Selain itu, forwarding VPN ditolak.", PrimaryButton("Buat Kebijakan", "/kebijakan/baru"))
 	@VPNTabs("kebijakan")

@@ -3,7 +3,7 @@ package views
 import "vpnaas/ui-goth/internal/model"
 
 templ OverviewPage(o Overview) {
-	@PageHeader("Ringkasan", "Gambaran langsung infrastruktur VPN Anda dari gateway.", RefreshLink("/ringkasan"))
+	@PageHeader("Ringkasan", "Gambaran langsung infrastruktur VPN Anda dari gateway.", PageRefresh("/ringkasan"))
 	for _, e := range o.Errors {
 		@ErrorBox(e)
 	}
@@ -76,13 +76,6 @@ templ OverviewPage(o Overview) {
 	</section>
 }
 
-templ RefreshLink(href string) {
-	<a href={ templ.URL(href) } class="inline-flex items-center gap-2 rounded-full border border-[#CED4DA] bg-white px-4 py-2.5 text-sm font-semibold text-[#212529] hover:bg-[#F8F9FA]">
-		@icon("refresh")
-		<span>Muat ulang</span>
-	</a>
-}
-
 templ KVList(items []KV) {
 	if len(items) == 0 {
 		@Empty("Tidak ada data", "Endpoint tidak mengembalikan data.")
@@ -106,7 +99,7 @@ templ KVList(items []KV) {
 }
 
 templ StatusPage(items []KV, err string) {
-	@PageHeader("Status Runtime", "Diagnostik runtime mentah langsung dari gateway VPN (swanctl).", RefreshLink("/status"))
+	@PageHeader("Status Runtime", "Diagnostik runtime mentah langsung dari gateway VPN (swanctl).", PageRefresh("/status"))
 	@ErrorBox(err)
 	<section class="rounded-xl border border-[#DEE2E6]">
 		if err != "" && len(items) == 0 {

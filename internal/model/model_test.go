@@ -17,8 +17,8 @@ func TestUserRuntimeLabels(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []struct{ admin, runtime, sessions, mode string }{
-		{"Enabled", "Active", "1", "Split"},
-		{"Disabled", "Down", "0", "Split"},
+		{"Enabled", "Active", "1/3", "Split"},
+		{"Disabled", "Down", "0/3", "Split"},
 		{"Enabled", "Unknown", "Unknown", "Split"},
 		{"Enabled", "Unknown", "Unknown", "Split"},
 	}
@@ -73,5 +73,26 @@ func TestMatches(t *testing.T) {
 	u := User{Username: "boss-windows", AllowedCIDRs: []string{"10.10.7.0/24"}}
 	if !Matches("", u.Username) || !Matches("BOSS", u.Username) || Matches("zzz", append([]string{u.Username}, u.AllowedCIDRs...)...) || !Matches("10.10", append([]string{u.Username}, u.AllowedCIDRs...)...) {
 		t.Fatal("matches")
+	}
+}
+
+func TestSessionLabelWithMax(t *testing.T) {
+	one, two, zero := 1, 2, 0
+	cases := []struct {
+		u    User
+		want string
+	}{
+		{User{RuntimeStatus: "Down", SessionCount: &zero}, "0/3"},
+		{User{RuntimeStatus: "Active", SessionCount: &one, MaxSessions: &two}, "1/2"},
+		{User{RuntimeStatus: "Active", SessionCount: &one, MaxSessions: &zero}, "1/3"},
+		{User{RuntimeStatus: "Unknown", SessionCount: &one}, "Unknown"},
+	}
+	for _, c := range cases {
+		if got := c.u.SessionLabel(); got != c.want {
+			t.Errorf("got %s want %s", got, c.want)
+		}
+	}
+	if (User{}).Limit() != 3 {
+		t.Fatal("default limit")
 	}
 }

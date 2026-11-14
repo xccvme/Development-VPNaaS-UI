@@ -603,6 +603,10 @@ func strVal(row map[string]any, k string) string {
 			}
 		}
 		return strings.Join(parts, "\n")
+	case float64:
+		if v == float64(int64(v)) {
+			return strconv.FormatInt(int64(v), 10)
+		}
 	}
 	return ""
 }
@@ -641,7 +645,7 @@ func (s *Server) connectionForm(w http.ResponseWriter, r *http.Request, _ auth.S
 }
 
 func (s *Server) userForm(w http.ResponseWriter, r *http.Request, _ auth.Session) {
-	if f, ok := s.loadForm(w, r, "users", []string{"username", "allowed_cidrs", "traffic_mode"}, map[string]string{"allowed_cidrs": forms.DefaultLAN, "traffic_mode": "split"}); ok {
+	if f, ok := s.loadForm(w, r, "users", []string{"username", "allowed_cidrs", "traffic_mode", "max_sessions"}, map[string]string{"traffic_mode": "split", "max_sessions": strconv.Itoa(forms.DefaultMaxSessions)}); ok {
 		render(w, r, views.UserForm(f))
 	}
 }

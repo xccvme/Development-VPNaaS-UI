@@ -20,7 +20,7 @@ func TestUserCreate(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	want := map[string]any{"username": "alice", "password": "Secret-123", "traffic_mode": "split", "allowed_cidrs": []string{"10.10.7.0/24", "192.168.1.0/24"}, "enabled": true}
+	want := map[string]any{"username": "alice", "password": "Secret-123", "traffic_mode": "split", "allowed_cidrs": []string{"10.10.7.0/24", "192.168.1.0/24"}, "enabled": true, "max_sessions": 3}
 	if !reflect.DeepEqual(body, want) {
 		t.Fatalf("got %#v", body)
 	}
@@ -37,8 +37,8 @@ func TestUserDefaultsAndPasswordWriteOnly(t *testing.T) {
 	if body["enabled"] != false {
 		t.Fatal("unchecked enabled must be false")
 	}
-	if !reflect.DeepEqual(body["allowed_cidrs"], []string{"10.10.7.0/24"}) {
-		t.Fatalf("default CIDR missing: %#v", body["allowed_cidrs"])
+	if _, ok := body["allowed_cidrs"]; ok {
+		t.Fatalf("blank CIDRs must be omitted so backend keeps/defaults: %#v", body["allowed_cidrs"])
 	}
 	if _, errs := User(vals("username", "bob"), true); errs["password"] == "" {
 		t.Fatal("password required on create")
@@ -132,5 +132,26 @@ func TestFullTrafficMode(t *testing.T) {
 	body, errs = User(vals("username", "a", "password", "Secret-123"), true)
 	if len(errs) != 0 || body["traffic_mode"] != "split" {
 		t.Fatalf("split default missing: %v %v", body, errs)
+	}
+}
+
+func TestUserMaxSessionsAndOptionalCIDRs(t *testing.T) {
+	body, errs := User(vals("username", "a", "password", "Secret-123"), true)
+	if len(errs) != 0 || body["max_sessions"] != 3 {
+		t.Fatalf("default 3: %v %v", body, errs)
+	}
+	if _, ok := body["allowed_cidrs"]; ok {
+		t.Fatal("empty allowed_cidrs must be omitted")
+	}
+	for _, v := range []string{"1", "2", "3"} {
+		body, errs := User(vals("username", "a", "max_sessions", v), false)
+		if len(errs) != 0 || body["max_sessions"] != int(v[0]-'0') {
+			t.Errorf("%s: %v", v, body["max_sessions"])
+		}
+	}
+	for _, v := range []string{"0", "4", "-1", "1.5", "x"} {
+		if _, errs := User(vals("username", "a", "max_sessions", v), false); errs["max_sessions"] == "" {
+			t.Errorf("%s accepted", v)
+		}
 	}
 }

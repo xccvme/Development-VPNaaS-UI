@@ -582,7 +582,7 @@ func TestUserKebabMenu(t *testing.T) {
 	e := setup(t)
 	e.login()
 	_, body := e.do("GET", "/akun", nil, nil)
-	for _, want := range []string{`data-account-actions`, `aria-haspopup="menu"`, `aria-expanded="false"`, `role="menu"`, `role="menuitem"`, `popover="manual"`, `>⋮</button>`, "Hapus"} {
+	for _, want := range []string{`data-row-actions`, `aria-haspopup="menu"`, `aria-expanded="false"`, `role="menu"`, `role="menuitem"`, `popover="manual"`, `class="kebab-button"`, "Hapus"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

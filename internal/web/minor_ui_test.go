@@ -33,7 +33,7 @@ func TestCertificateDownload(t *testing.T) {
 		if r.URL.Path != "/api/users/3/profile" || r.Header.Get("X-API-Key") != apiKey {
 			t.Error("wrong authenticated upstream request")
 		}
-		json.NewEncoder(w).Encode(map[string]any{"ca_certificate": current, "password": "DO-NOT-EXPORT"})
+		json.NewEncoder(w).Encode(map[string]any{"username": "alice", "ca_certificate": current, "password": "DO-NOT-EXPORT"})
 	}))
 	defer api.Close()
 	kp := filepath.Join(t.TempDir(), "key")
@@ -55,7 +55,7 @@ func TestCertificateDownload(t *testing.T) {
 		t.Fatalf("anonymous: %d", w.Code)
 	}
 	w := request(true)
-	if w.Code != 200 || w.Header().Get("Content-Type") != "application/x-x509-ca-cert" || w.Header().Get("Content-Disposition") != `attachment; filename="vpnaas-ca.crt"` || w.Header().Get("Cache-Control") != "no-store" || w.Body.String() != ca {
+	if w.Code != 200 || w.Header().Get("Content-Type") != "application/x-x509-ca-cert" || w.Header().Get("Content-Disposition") != `attachment; filename="alice.crt"` || w.Header().Get("Cache-Control") != "no-store" || w.Body.String() != ca {
 		t.Fatalf("cert response: %d %v", w.Code, w.Header())
 	}
 	if strings.Contains(w.Body.String(), "DO-NOT-EXPORT") || strings.Contains(w.Body.String(), apiKey) {
@@ -101,7 +101,7 @@ func TestAccountMinorUI(t *testing.T) {
 	e := setup(t)
 	e.login()
 	_, body := e.do("GET", "/akun", nil, nil)
-	for _, want := range []string{`hx-get="/akun/3/sesi"`, `hx-target="#modal"`, `/unduh/akun/3/vpnaas-ca.crt`, "Download Sertifikat (.crt)", `alt="Logo VPNaaS"`} {
+	for _, want := range []string{`class="flex items-center gap-3"`, "Profil VPN (.json)", `title="Profil berisi kredensial; simpan dengan aman"`, `hx-get="/akun/3/sesi"`, `hx-target="#modal"`, `/unduh/akun/3/vpnaas-ca.crt`, "Download Sertifikat (.crt)", `alt="Logo VPNaaS"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}

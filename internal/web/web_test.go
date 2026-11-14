@@ -476,7 +476,7 @@ func TestDownloads(t *testing.T) {
 	}
 	for _, p := range []string{"/unduh/akun/3/windows.ps1", "/downloads/users/3/windows.ps1"} {
 		res, body = e.do("GET", p, nil, nil)
-		if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("Content-Disposition") != `attachment; filename="vpnaas-user-3-windows.ps1"` {
+		if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("Content-Disposition") != `attachment; filename="poc-client.ps1"` {
 			t.Fatalf("%s: %d %v", p, res.StatusCode, res.Header)
 		}
 		if strings.Contains(body, "DO-NOT-EXPORT") || strings.Contains(body, apiKey) || !strings.Contains(body, "-SplitTunneling $true") || !strings.Contains(body, "'10.10.7.0/24'") {

@@ -120,10 +120,34 @@ func maskBits(mask netip.Addr, host bool) (int, bool) {
 	return n, true
 }
 
+var usernameRe = regexp.MustCompile(`^[A-Za-z0-9_@.:-]{1,128}$`)
+
+// Filename validates the backend username and makes a Windows-safe basename.
+// Colons are legal account characters but illegal in Windows filenames.
+func Filename(username string) (string, error) {
+	if !usernameRe.MatchString(username) {
+		return "", invalid("invalid username")
+	}
+	name := strings.TrimRight(strings.ReplaceAll(username, ":", "_"), ".")
+	if name == "" {
+		name = "_"
+	}
+	stem := strings.ToUpper(strings.SplitN(name, ".", 2)[0])
+	switch stem {
+	case "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
+		name = "_" + name
+	}
+	return name, nil
+}
+
 // Render validates profile and returns the CRLF PowerShell script.
 func Render(profile map[string]any) (string, error) {
 	if profile == nil {
 		return "", invalid("profile must be an object")
+	}
+	username, _ := profile["username"].(string)
+	if _, err := Filename(username); err != nil {
+		return "", err
 	}
 	full := false
 	if mode, ok := profile["traffic_mode"]; ok {
@@ -190,10 +214,10 @@ func Render(profile map[string]any) (string, error) {
 	for i, r := range routes {
 		quoted[i] = "'" + r + "'"
 	}
-	out := strings.ReplaceAll(template, "__SERVER__", server)
-	out = strings.ReplaceAll(out, "__IDENTITY__", identity)
-	out = strings.ReplaceAll(out, "__ROUTES__", strings.Join(quoted, ", "))
-	out = strings.ReplaceAll(out, "__CA__", base64.StdEncoding.EncodeToString([]byte(ca)))
+	// Replace in one pass: account names resembling tokens must stay literal.
+	out := strings.NewReplacer("__USERNAME__", username, "__SERVER__", server,
+		"__IDENTITY__", identity, "__ROUTES__", strings.Join(quoted, ", "),
+		"__CA__", base64.StdEncoding.EncodeToString([]byte(ca))).Replace(template)
 	if full {
 		out = strings.ReplaceAll(out, "-SplitTunneling $true", "-SplitTunneling $false")
 		out = strings.ReplaceAll(out, "Internet stays on the existing local connection.", "Full tunnel: all IPv4 internet traffic goes through the VPN gateway.")

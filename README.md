@@ -187,4 +187,26 @@ Kunci sesi dibuat otomatis mode 0600 dalam volume `ui-state`. Restart/recreate m
 
 Dockerfile multi-stage menjalankan Go test/vet dan menghasilkan binary statis. `.templ`, hasil `*_templ.go`, CSS terkompilasi, HTMX, dan logo lokal sudah disertakan. Build produksi tidak membutuhkan Node, templ, atau Tailwind di host; tidak memakai CDN.
 
-Lihat [pengembangan](dokumentasi/PENGEMBANGAN.md), [fitur/keamanan](dokumentasi/FITUR.md), serta [pengujian](dokumentasi/PENGUJIAN.md). Deployment diverifikasi pada Linux; Docker Desktop belum diuji pada Windows nyata. Keberhasilan HTTP/Linux tidak membuktikan cmdlet VPN Windows atau networking Desktop pada perangkat Anda sudah berjalan.
+Lihat [pengembangan](dokumentasi/PENGEMBANGAN.md) dan [fitur/keamanan](dokumentasi/FITUR.md). Docker Desktop belum diuji pada Windows nyata. Keberhasilan HTTP/Linux tidak membuktikan cmdlet VPN Windows atau networking Desktop pada perangkat Anda sudah berjalan.
+
+## Unduhan akun dan setup Windows
+
+Menu akun menyediakan **Profil VPN (.json)** (berisi kredensial; simpan dengan aman), **Windows .ps1**, dan **Download Sertifikat (.crt)**. Semua unduhan memerlukan login dan memakai `Cache-Control: no-store`. Sertifikat CA dan skrip diunduh sebagai `username.crt` dan `username.ps1`; karakter `:` diganti `_`, titik akhir dihapus, dan nama perangkat Windows seperti `CON` diberi awalan `_` agar nama file aman. Sertifikat adalah CA publik bersama, bukan sertifikat privat per akun.
+
+Jalankan skrip dari **Windows PowerShell → Run as Administrator / Jalankan sebagai Administrator**, menggunakan akun Windows yang sama. Skrip berhenti dengan pesan jelas sebelum perubahan bila tidak elevated. Default **nama profil koneksi VPN** sama persis dengan username akun VPN, bukan nama NIC/adaptor fisik; tekan Enter untuk mempertahankan atau isi nama lain pada prompt opsional. Konfirmasi kepercayaan CA tetap diperlukan. Password VPN dimasukkan sendiri melalui dialog Windows, tidak disertakan dalam skrip. Split/full, proposal IKE/IPsec, dan impor CA tetap mengikuti profil. Setelah mengganti mode, unduh dan terapkan ulang saat VPN terputus lalu reconnect.
+
+## Tampilan aplikasi
+
+Tangkapan layar aplikasi nyata; bilah alamat browser tidak disertakan dan nilai subnet akun ditutup dengan label **DISAMARKAN** untuk publikasi. Status dan jumlah sesi tidak diubah. Bukan bukti pengujian koneksi Windows.
+
+### Login
+
+![Halaman login](dokumentasi/images/login.png)
+
+### Daftar akun
+
+![Daftar akun C2S](dokumentasi/images/akun.png)
+
+### Ubah akun
+
+![Modal ubah akun](dokumentasi/images/ubah-akun.png)

@@ -889,8 +889,14 @@ func (s *Server) downloadCertificate(w http.ResponseWriter, r *http.Request, _ a
 		jsonError(w, 502, "Sertifikat CA tidak valid")
 		return
 	}
+	username, _ := p["username"].(string)
+	name, err := winsetup.Filename(username)
+	if err != nil {
+		jsonError(w, 502, "Username profil tidak valid")
+		return
+	}
 	w.Header().Set("Content-Type", "application/x-x509-ca-cert")
-	w.Header().Set("Content-Disposition", `attachment; filename="vpnaas-ca.crt"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`.crt"`)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Write(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}))
 }
@@ -910,8 +916,14 @@ func (s *Server) downloadWindows(w http.ResponseWriter, r *http.Request, _ auth.
 		jsonError(w, http.StatusBadGateway, "Profil VPN tidak dapat menghasilkan setup Windows yang aman")
 		return
 	}
+	username, _ := p["username"].(string)
+	name, err := winsetup.Filename(username)
+	if err != nil {
+		jsonError(w, 502, "Username profil tidak valid")
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="vpnaas-user-`+r.PathValue("id")+`-windows.ps1"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`.ps1"`)
 	w.Header().Set("Cache-Control", "no-store")
 	io.WriteString(w, script)
 }

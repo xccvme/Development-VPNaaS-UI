@@ -42,7 +42,7 @@ func TestSafetyProperties(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range []string{"-SplitTunneling $true", "Add-VpnConnectionRoute", "'10.10.7.0/24'", "'VPNaaS-PoC'", "Group14", "rasphone.exe", "\r\n"} {
+	for _, s := range []string{"-SplitTunneling $true", "Add-VpnConnectionRoute", "'10.10.7.0/24'", "'alice'", "Group14", "rasphone.exe", "\r\n"} {
 		if !strings.Contains(got, s) {
 			t.Errorf("missing %q", s)
 		}
@@ -56,6 +56,7 @@ func TestSafetyProperties(t *testing.T) {
 
 func base() map[string]any {
 	return map[string]any{
+		"username":       "alice",
 		"server":         "vpn.example.com",
 		"ca_certificate": "-----BEGIN CERTIFICATE-----\nY2VydA==\n-----END CERTIFICATE-----",
 		"allowed_cidrs":  []any{"10.10.7.0/24"},

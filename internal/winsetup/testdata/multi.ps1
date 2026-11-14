@@ -2,17 +2,22 @@
 # Run in Windows PowerShell 5.1 as Administrator, using the VPN user's Windows account.
 # Review the CA trust below; importing a CA grants system-wide trust.
 # Disconnect the VPN before running. Internet stays on the existing local connection.
-#Requires -RunAsAdministrator
 [CmdletBinding()]
 param(
-    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$')]
-    [string]$ConnectionName = 'VPNaaS-PoC'
+    [ValidatePattern('^[A-Za-z0-9_@.:-][A-Za-z0-9 _@.:-]{0,127}$')]
+    [string]$ConnectionName = 'bob@example'
 )
 $ErrorActionPreference = 'Stop'
+# Stop before prompts, CA import, or VPN changes. This is the VPN profile name,
+# not a rename of a physical network adapter. Elevate the same Windows user.
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'Open Windows PowerShell with Run as Administrator (Jalankan sebagai Administrator), then run this script again. No changes were made.'
+}
 $answer = Read-Host "Connection name [$ConnectionName] (Enter keeps default)"
 if ($answer) { $ConnectionName = $answer }
-if ($ConnectionName -notmatch '^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$') {
-    throw 'Use 1-64 letters, digits, spaces, dots, underscores or hyphens for the connection name.'
+if ($ConnectionName -notmatch '^[A-Za-z0-9_@.:-][A-Za-z0-9 _@.:-]{0,127}$') {
+    throw 'Use 1-128 letters, digits, spaces, dots, underscores, @, colons or hyphens for the VPN profile name.'
 }
 $server = 'vpn.example.com'
 $serverIdentity = 'vpn.example.com'

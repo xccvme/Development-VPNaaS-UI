@@ -255,8 +255,10 @@ templ UsersTable(t UserTable) {
 									@Badge(u.RuntimeLabel())
 								</td>
 								<td class="px-3 py-3">
-									{ u.SessionLabel() }
-									@rowBtn("Detail", "get", idURL("/akun", u.ID, "/sesi"), "#modal", false)
+                                    <div class="flex items-center gap-3">
+                                     <span>{ u.SessionLabel() }</span>
+                                     @rowBtn("Detail", "get", idURL("/akun", u.ID, "/sesi"), "#modal", false)
+                                    </div>
 								</td>
 								<td class="px-3 py-3 font-mono">{ model.Join(u.VirtualIPs) }</td>
 								<td class="px-3 py-3">
@@ -352,7 +354,7 @@ templ accountActions(u model.User) {
  <div id={ "account-menu-" + itoa(u.ID) } class="account-menu" role="menu" aria-label={ "Aksi " + u.Username } popover="manual">
  <button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/ubah") } hx-target="#modal">Ubah</button>
  <button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/password") } hx-target="#modal">Password</button>
- <a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/profil.json")) } download title="Profil berisi kredensial">JSON</a>
+ <a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/profil.json")) } download title="Profil berisi kredensial; simpan dengan aman">Profil VPN (.json)</a>
  <a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/windows.ps1")) } download>Windows .ps1</a>
  <a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/vpnaas-ca.crt")) } download>Download Sertifikat (.crt)</a>
  <button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/akun", u.ID, "/hapus") } hx-target="#modal">Hapus</button>

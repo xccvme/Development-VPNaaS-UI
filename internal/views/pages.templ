@@ -1,0 +1,164 @@
+package views
+
+import "vpnaas/ui-goth/internal/model"
+
+templ OverviewPage(o Overview) {
+	@PageHeader("Ringkasan", "Gambaran langsung infrastruktur VPN Anda dari gateway.", RefreshLink("/ringkasan"))
+	for _, e := range o.Errors {
+		@ErrorBox(e)
+	}
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+		for _, c := range o.Cards {
+			<a href={ templ.URL(c.Href) } class="block rounded-xl border border-[#DEE2E6] bg-white p-5 shadow-sm transition hover:border-[#2F6BC4]">
+				<div class="flex items-center justify-between text-sm font-semibold text-[#6C757D]">
+					<span>{ c.Label }</span>
+					if c.Ok {
+						@Dot("Active")
+					} else {
+						@Dot("Unknown")
+					}
+				</div>
+				<div class="mt-2 text-3xl font-bold text-[#212529]">{ c.Value }</div>
+				<div class="mt-1 text-xs text-[#6C757D]">{ c.Note }</div>
+			</a>
+		}
+	</div>
+	<div class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+		<section class="flex flex-col rounded-xl border border-[#DEE2E6]">
+			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Akun C2S</h2>
+			if len(o.Users) == 0 {
+				@Empty("Belum ada data akun", "Data akun tidak tersedia atau belum dibuat.")
+			} else {
+				<ul class="divide-y divide-[#DEE2E6]">
+					for _, u := range o.Users {
+						<li class="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
+							<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
+								@Dot(u.RuntimeLabel())
+								{ u.Username }
+							</span>
+							<span class="flex flex-wrap items-center gap-2">
+								@Badge(u.AdminLabel())
+								@Badge(u.RuntimeLabel())
+								<span class="font-mono text-xs text-[#6C757D]">{ model.Join(u.VirtualIPs) }</span>
+							</span>
+						</li>
+					}
+				</ul>
+			}
+			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/akun" class="font-semibold text-[#1A73E8]">Kelola akun →</a></div>
+		</section>
+		<section class="flex flex-col rounded-xl border border-[#DEE2E6]">
+			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Koneksi S2S</h2>
+			if len(o.Connections) == 0 {
+				@Empty("Belum ada koneksi", "Buat tunnel site-to-site untuk menghubungkan jaringan privat.")
+			} else {
+				<ul class="divide-y divide-[#DEE2E6]">
+					for _, c := range o.Connections {
+						<li class="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
+							<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
+								@Dot(c.Runtime)
+								{ c.Name }
+							</span>
+							<span class="flex gap-2">
+								@Badge(c.AdminLabel())
+								@Badge(c.Runtime)
+							</span>
+						</li>
+					}
+				</ul>
+			}
+			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/koneksi" class="font-semibold text-[#1A73E8]">Kelola koneksi →</a></div>
+		</section>
+	</div>
+	<section class="mt-6 rounded-xl border border-[#DEE2E6]">
+		<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Info gateway</h2>
+		@KVList(o.Info)
+	</section>
+}
+
+templ RefreshLink(href string) {
+	<a href={ templ.URL(href) } class="inline-flex items-center gap-2 rounded-full border border-[#CED4DA] bg-white px-4 py-2.5 text-sm font-semibold text-[#212529] hover:bg-[#F8F9FA]">
+		@icon("refresh")
+		<span>Muat ulang</span>
+	</a>
+}
+
+templ KVList(items []KV) {
+	if len(items) == 0 {
+		@Empty("Tidak ada data", "Endpoint tidak mengembalikan data.")
+	} else {
+		<dl class="divide-y divide-[#DEE2E6]">
+			for _, kv := range items {
+				if kv.Block {
+					<div class="px-5 py-4">
+						<dt class="mb-2 text-sm font-semibold text-[#495057]">{ kv.Key }</dt>
+						<dd><pre class="max-h-[480px] overflow-auto whitespace-pre rounded-lg bg-[#F8F9FA] p-4 font-mono text-xs leading-relaxed text-[#212529]">{ kv.Value }</pre></dd>
+					</div>
+				} else {
+					<div class="flex flex-wrap justify-between gap-2 px-5 py-3 text-sm">
+						<dt class="font-semibold text-[#495057]">{ kv.Key }</dt>
+						<dd class="font-mono text-[#212529]">{ kv.Value }</dd>
+					</div>
+				}
+			}
+		</dl>
+	}
+}
+
+templ StatusPage(items []KV, err string) {
+	@PageHeader("Status Runtime", "Diagnostik runtime mentah langsung dari gateway VPN (swanctl).", RefreshLink("/status"))
+	@ErrorBox(err)
+	<section class="rounded-xl border border-[#DEE2E6]">
+		if err != "" && len(items) == 0 {
+			@Empty("Status runtime tidak tersedia", "Status: Unknown. Periksa backend API dan SSH tunnel, lalu muat ulang.")
+		} else {
+			@KVList(items)
+		}
+	</section>
+}
+
+templ AuditPage(a Audit) {
+	@PageHeader("Audit", "Riwayat aktivitas control-plane (hanya metadata).", nil)
+	@AuditTable(a)
+}
+
+templ AuditTable(a Audit) {
+	<section id="audit-table" class="rounded-xl border border-[#DEE2E6]">
+		<div class="flex flex-col gap-3 border-b border-[#DEE2E6] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+			<div class="text-sm text-[#6C757D]">{ itoa(len(a.Rows)) } dari { itoa(a.Total) } entri</div>
+			<div class="flex items-center gap-2">
+				@SearchBox("/audit/tabel", "#audit-table", a.Query, "Cari audit…")
+				@RefreshButton("#audit-table", "/audit/tabel")
+			</div>
+		</div>
+		@ErrorBox(a.Err)
+		if len(a.Rows) == 0 {
+			if a.Total > 0 {
+				@Empty("Tidak ada data yang cocok", "Coba kata kunci lain.")
+			} else if a.Err == "" {
+				@Empty("Belum ada aktivitas", "Kejadian gateway akan tampil di sini.")
+			}
+		} else {
+			<div class="overflow-x-auto">
+				<table class="min-w-full text-sm">
+					<thead class="bg-[#E9ECEF]">
+						<tr>
+							for _, c := range a.Columns {
+								@th(c)
+							}
+						</tr>
+					</thead>
+					<tbody>
+						for _, r := range a.Rows {
+							<tr class="border-t border-[#DEE2E6] hover:bg-[#F8F9FA]">
+								for _, c := range a.Columns {
+									<td class="whitespace-nowrap px-4 py-3">{ cell(r[c]) }</td>
+								}
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</section>
+}

@@ -1,0 +1,38 @@
+name: vpnaas-ui
+services:
+  ui:
+    build:
+      context: .
+      network: host
+    network_mode: host
+    restart: always
+    environment:
+      LISTEN_ADDR: ${LISTEN_ADDR:-0.0.0.0:8080}
+      UPSTREAM_URL: ${UPSTREAM_URL:-http://127.0.0.1:8000}
+      API_KEY_FILE: /run/secrets/backend-api.key
+      SESSION_KEY_FILE: /var/lib/vpnaas-ui/session.key
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      COOKIE_SECURE: ${COOKIE_SECURE:-0}
+    volumes:
+      - type: bind
+        source: ${BACKEND_API_KEY_FILE:-/etc/vpnaas/api.key}
+        target: /run/secrets/backend-api.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - ui-state:/var/lib/vpnaas-ui
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  ui-state:

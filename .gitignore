@@ -1,0 +1,8 @@
+bin/
+.env
+.env.*
+!.env.example
+.session*
+*.key
+__pycache__/
+evidence/

@@ -1,0 +1,460 @@
+package views
+
+import "vpnaas/ui-goth/internal/model"
+
+// ---------- shared form pieces ----------
+
+templ Modal(title string) {
+	<div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#212529]/40 px-4 py-10" data-modal>
+		<div class="w-full max-w-lg rounded-xl bg-white shadow-2xl" role="dialog" aria-modal="true" aria-label={ title }>
+			<div class="flex items-center justify-between border-b border-[#DEE2E6] px-6 py-4">
+				<h2 class="text-lg font-bold">{ title }</h2>
+				<button type="button" class="rounded-md px-2 text-2xl leading-none text-[#6C757D] hover:bg-[#F1F3F5]" data-modal-close aria-label="Tutup">×</button>
+			</div>
+			<div class="px-6 py-5">
+				{ children... }
+			</div>
+		</div>
+	</div>
+}
+
+templ field(label, name, value, typ, errMsg, hint string, required bool) {
+	<label class="block text-sm font-semibold text-[#212529]">
+		{ label }
+		if typ == "password" {
+			<input
+				type="password"
+				name={ name }
+				autocomplete="new-password"
+				placeholder={ hint }
+				if required {
+					required
+				}
+				class={ inputClass(errMsg) }
+			/>
+		} else {
+			<input
+				type={ typ }
+				name={ name }
+				value={ value }
+				if required {
+					required
+				}
+				class={ inputClass(errMsg) }
+			/>
+			if hint != "" {
+				<span class="mt-1 block text-xs font-normal text-[#6C757D]">{ hint }</span>
+			}
+		}
+		if errMsg != "" {
+			<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ errMsg }</span>
+		}
+	</label>
+}
+
+func inputClass(err string) string {
+	if err != "" {
+		return "mt-1 w-full rounded-md border border-[#DC3545] px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-[#DC3545]/20"
+	}
+	return "mt-1 w-full rounded-md border border-[#CED4DA] px-3 py-2 font-normal focus:border-[#2F6BC4] focus:outline-none focus:ring-2 focus:ring-[#2F6BC4]/20"
+}
+
+templ enabledBox(on bool) {
+	<label class="flex items-center gap-2 text-sm font-semibold">
+		<input type="checkbox" name="enabled" checked?={ on } class="h-4 w-4 accent-[#2F6BC4]"/>
+		Enabled (administratif)
+	</label>
+}
+
+templ formFooter(submit string) {
+	<div class="flex justify-end gap-2 border-t border-[#DEE2E6] pt-4">
+		<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Batal</button>
+		<button type="submit" class="rounded-full bg-[#2F6BC4] px-5 py-2 text-sm font-semibold text-white hover:bg-[#2559A8]">{ submit }</button>
+	</div>
+}
+
+templ ConfirmModal(c Confirm) {
+	@Modal(c.Title) {
+		@ErrorBox(c.Err)
+		<p class="text-sm text-[#495057]">{ c.Message }</p>
+		<p class="mt-2 rounded-md bg-[#F8F9FA] px-3 py-2 font-mono text-sm">{ c.Name }</p>
+		<div class="mt-5 flex justify-end gap-2">
+			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Batal</button>
+			if c.Button == "Terminate" {
+				<button type="button" hx-post={ c.URL } hx-target="#conn-table" hx-swap="outerHTML" class="rounded-full bg-[#DC3545] px-5 py-2 text-sm font-semibold text-white hover:bg-[#B02A37]">{ c.Button }</button>
+			} else {
+				<button type="button" hx-delete={ c.URL } hx-target="#modal" class="rounded-full bg-[#DC3545] px-5 py-2 text-sm font-semibold text-white hover:bg-[#B02A37]">{ c.Button }</button>
+			}
+		</div>
+	}
+}
+
+templ tableHead(count, total int, url, target, q, placeholder string) {
+	<div class="flex flex-col gap-3 border-b border-[#DEE2E6] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+		<div class="text-sm text-[#6C757D]">{ itoa(count) } dari { itoa(total) } data</div>
+		<div class="flex items-center gap-2">
+			@SearchBox(url, target, q, placeholder)
+			@RefreshButton(target, url)
+		</div>
+	</div>
+}
+
+templ emptyOrNoMatch(total int, hasErr bool, title, detail string) {
+	if total > 0 {
+		@Empty("Tidak ada data yang cocok", "Coba kata kunci lain.")
+	} else if !hasErr {
+		@Empty(title, detail)
+	}
+}
+
+// ---------- Koneksi S2S ----------
+
+templ ConnectionsPage(t ConnTable) {
+	@PageHeader("Koneksi Site-to-Site", "Konfigurasi dan operasikan tunnel IPsec IKEv2 antar jaringan.", PrimaryButton("Buat Koneksi", "/koneksi/baru"))
+	@VPNTabs("koneksi")
+	@ConnectionsTable(t)
+}
+
+templ ConnectionsTable(t ConnTable) {
+	<section id="conn-table" class="rounded-xl border border-[#DEE2E6]" hx-get="/koneksi/tabel" hx-trigger="every 30s, vpnaas:changed from:body" hx-swap="outerHTML" hx-include="this" hx-disinherit="*">
+		@tableHead(len(t.Rows), t.Total, "/koneksi/tabel", "#conn-table", t.Query, "Cari koneksi…")
+		<div class="px-5 pt-4 empty:hidden">
+			@FlashBox(t.Flash)
+			@ErrorBox(t.Err)
+			if t.StatusErr != "" {
+				@ErrorBox("Status runtime tidak tersedia (ditampilkan Unknown): " + t.StatusErr)
+			}
+		</div>
+		if len(t.Rows) == 0 {
+			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada koneksi", "Buat koneksi pertama untuk menghubungkan jaringan privat Anda.")
+		} else {
+			<div class="overflow-x-auto pb-1" tabindex="0" aria-label="Tabel dapat digeser horizontal">
+				<table class="min-w-full text-sm">
+					<thead class="bg-[#E9ECEF]">
+						<tr>
+							@th("Nama Koneksi")
+							@th("Alamat Remote")
+							@th("Remote ID")
+							@th("Subnet Lokal")
+							@th("Subnet Remote")
+							@th("Admin")
+							@th("Runtime")
+							@th("Aksi")
+						</tr>
+					</thead>
+					<tbody>
+						for _, c := range t.Rows {
+							<tr class="border-t border-[#DEE2E6] hover:bg-[#F8F9FA]">
+								<td class="whitespace-nowrap px-3 py-3">
+									<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
+										@Dot(c.Runtime)
+										{ c.Name }
+									</span>
+								</td>
+								<td class="px-3 py-3 font-mono">{ c.RemoteAddress }</td>
+								<td class="px-3 py-3 font-mono">{ c.RemoteID }</td>
+								<td class="px-3 py-3 font-mono">{ c.LocalTS }</td>
+								<td class="px-3 py-3 font-mono">{ c.RemoteTS }</td>
+								<td class="px-3 py-3">
+									@Badge(c.AdminLabel())
+								</td>
+								<td class="px-3 py-3">
+									@Badge(c.Runtime)
+								</td>
+								<td class="px-3 py-3">
+<div class="flex min-w-[240px] max-w-[320px] flex-wrap gap-1.5">
+ @rowBtn("Ubah", "get", idURL("/koneksi", c.ID, "/ubah"), "#modal", false)
+ <button type="button" hx-post={ idURL("/koneksi", c.ID, "/initiate") } hx-target="#conn-table" hx-swap="outerHTML" class="whitespace-nowrap rounded-full border border-[#CED4DA] px-2.5 py-1 text-xs font-semibold text-[#1E7B34] hover:bg-[#E6F4EA]">Initiate</button>
+ @rowBtn("Terminate", "get", idURL("/koneksi", c.ID, "/terminate"), "#modal", true)
+ @rowBtn("Hapus", "get", idURL("/koneksi", c.ID, "/hapus"), "#modal", true)
+ </div>
+
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</section>
+}
+
+templ ConnectionForm(f Form) {
+	@Modal(ternary(f.Edit(), "Ubah Koneksi", "Buat Koneksi")) {
+		<form
+			if f.Edit() {
+				hx-put={ idURL("/koneksi", f.ID, "") }
+			} else {
+				hx-post="/koneksi"
+			}
+			hx-target="#modal"
+			class="space-y-4"
+		>
+			@ErrorBox(f.Err)
+			@field("Nama koneksi", "name", f.V("name"), "text", f.E("name"), "", true)
+			@field("Alamat remote (IPv4)", "remote_address", f.V("remote_address"), "text", f.E("remote_address"), "", true)
+			@field("Remote ID (opsional)", "remote_id", f.V("remote_id"), "text", f.E("remote_id"), "Kosong = sama dengan alamat remote.", false)
+			@field("Traffic selector lokal (CIDR)", "local_ts", f.V("local_ts"), "text", f.E("local_ts"), "Default 10.10.7.0/24.", false)
+			@field("Traffic selector remote (CIDR)", "remote_ts", f.V("remote_ts"), "text", f.E("remote_ts"), "", true)
+			@field("Pre-shared key", "psk", "", "password", f.E("psk"), ternary(f.Edit(), "Kosongkan untuk mempertahankan PSK lama", "PSK baru (8-128 karakter)"), !f.Edit())
+			@enabledBox(f.Enabled)
+			@formFooter(ternary(f.Edit(), "Simpan", "Buat"))
+		</form>
+	}
+}
+
+// ---------- Akun C2S ----------
+
+templ UsersPage(t UserTable) {
+	@PageHeader("Akun Client-to-Site", "Kelola identitas remote access, izin jaringan, dan profil klien.", PrimaryButton("Buat Akun", "/akun/baru"))
+	@VPNTabs("akun")
+	@UsersTable(t)
+}
+
+templ UsersTable(t UserTable) {
+	<section id="users-table" class="rounded-xl border border-[#DEE2E6]" hx-get="/akun/tabel" hx-trigger="every 30s, vpnaas:changed from:body" hx-swap="outerHTML" hx-include="this" hx-disinherit="*">
+		@tableHead(len(t.Rows), t.Total, "/akun/tabel", "#users-table", t.Query, "Cari akun…")
+		<div class="px-5 pt-4 empty:hidden">
+			@FlashBox(t.Flash)
+			@ErrorBox(t.Err)
+			if t.Stale {
+				@ErrorBox("Menampilkan data terakhir; status runtime tidak dapat diverifikasi sehingga ditandai Unknown.")
+			}
+		</div>
+		if len(t.Rows) == 0 {
+			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada akun", "Buat akun C2S pertama untuk remote access.")
+		} else {
+			<div class="overflow-x-auto pb-1" tabindex="0" aria-label="Tabel dapat digeser horizontal">
+				<table class="min-w-full text-sm">
+					<thead class="bg-[#E9ECEF]">
+						<tr>
+							@th("Username")
+							@th("Jaringan Diizinkan")
+							@th("Admin")
+							@th("Runtime")
+							@th("Sesi")
+							@th("Virtual IP")
+							@th("Aksi")
+						</tr>
+					</thead>
+					<tbody>
+						for _, u := range t.Rows {
+							<tr class="border-t border-[#DEE2E6] hover:bg-[#F8F9FA]">
+								<td class="whitespace-nowrap px-3 py-3">
+									<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
+										@Dot(u.RuntimeLabel())
+										{ u.Username }
+									</span>
+									<span class="text-xs text-[#6C757D]">ID { itoa(u.ID) } · <span class="rounded bg-[#E8EEF9] px-2 py-0.5 font-semibold text-[#2F6BC4]">{ u.TrafficLabel() }</span></span>
+								</td>
+								<td class="px-3 py-3 font-mono">{ model.Join(u.AllowedCIDRs) }</td>
+								<td class="px-3 py-3">
+									@Badge(u.AdminLabel())
+								</td>
+								<td class="px-3 py-3">
+									@Badge(u.RuntimeLabel())
+								</td>
+								<td class="px-3 py-3">
+									{ u.SessionLabel() }
+									@rowBtn("Detail", "get", idURL("/akun", u.ID, "/sesi"), "#modal", false)
+								</td>
+								<td class="px-3 py-3 font-mono">{ model.Join(u.VirtualIPs) }</td>
+								<td class="px-3 py-3">
+									@accountActions(u)
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</section>
+
+}
+
+templ UserSessions(u model.User, errMsg string) {
+ @Modal("Detail Sesi") {
+  @ErrorBox(errMsg)
+  if errMsg == "" {
+   <p class="mb-4 text-sm font-semibold">{ u.Username } · ID { itoa(u.ID) } · { u.RuntimeLabel() }</p>
+   if len(u.Sessions) == 0 {
+    <p class="text-sm text-[#6C757D]">Tidak ada sesi aktif.</p>
+   }
+   <div class="max-h-96 space-y-3 overflow-y-auto">
+   for _, s := range u.Sessions {
+    <div class="rounded-lg bg-[#F8F9FA] p-3 font-mono text-xs break-words">
+     <div>IKE #{ s.IKEID } · { s.IKEState }</div>
+     <div>dari { s.RemoteAddress }</div>
+     <div>VIP { model.Join(s.VirtualIPs) }</div>
+     for _, c := range s.Children {
+      <div class="mt-2">CHILD #{ c.ChildID } · { c.State } · in { model.Bytes(c.BytesIn) } · out { model.Bytes(c.BytesOut) }</div>
+     }
+    </div>
+   }
+   </div>
+  }
+  <div class="mt-5 flex justify-end border-t border-[#DEE2E6] pt-4">
+   <button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Tutup</button>
+  </div>
+ }
+}
+
+templ UserForm(f Form) {
+	@Modal(ternary(f.Edit(), "Ubah Akun", "Buat Akun")) {
+		<form
+			if f.Edit() {
+				hx-put={ idURL("/akun", f.ID, "") }
+			} else {
+				hx-post="/akun"
+			}
+			hx-target="#modal"
+			class="space-y-4"
+		>
+			@ErrorBox(f.Err)
+			@field("Username", "username", f.V("username"), "text", f.E("username"), "", true)
+			if !f.Edit() {
+				@field("Password", "password", "", "password", f.E("password"), "Password baru (8-128 karakter), tidak pernah ditampilkan lagi", true)
+			} else {
+				@field("Password", "password", "", "password", f.E("password"), "Kosongkan untuk mempertahankan password lama", false)
+			}
+			<label class="block text-sm font-semibold">
+				Allowed CIDRs
+				<textarea name="allowed_cidrs" rows="3" class={ inputClass(f.E("allowed_cidrs")) + " font-mono" }>{ f.V("allowed_cidrs") }</textarea>
+				<span class="mt-1 block text-xs font-normal text-[#6C757D]">Satu CIDR per baris atau dipisah koma. Kosong = 10.10.7.0/24.</span>
+				if f.E("allowed_cidrs") != "" {
+					<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("allowed_cidrs") }</span>
+				}
+			</label>
+			@trafficMode(f)
+			@enabledBox(f.Enabled)
+			@formFooter(ternary(f.Edit(), "Simpan", "Buat"))
+		</form>
+	}
+}
+
+templ trafficMode(f Form) {
+ <fieldset class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
+ <legend class="px-1 text-sm font-semibold">Mode trafik</legend>
+ <select name="traffic_mode" aria-label="Mode trafik" class={ inputClass(f.E("traffic_mode")) }>
+ <option value="split" selected?={ f.V("traffic_mode") != "full" }>Split tunnel (default)</option>
+ <option value="full" selected?={ f.V("traffic_mode") == "full" }>Full tunnel</option>
+ </select>
+ <p class="text-xs text-[#6C757D]">Split: hanya jaringan diizinkan lewat VPN (default). Full: semua internet lewat server; akses LAN tetap dibatasi allowed CIDRs. Unduh ulang profil / Setup Windows lalu sambungkan ulang setelah mengubah mode.</p>
+ if f.E("traffic_mode") != "" {
+ <p class="text-xs text-[#B3261E]">{ f.E("traffic_mode") }</p>
+ }
+ </fieldset>
+}
+
+templ accountActions(u model.User) {
+ <div data-account-actions>
+ <button type="button" data-actions-toggle aria-label={ "Aksi untuk " + u.Username } aria-haspopup="menu" aria-expanded="false" aria-controls={ "account-menu-" + itoa(u.ID) } class="kebab-button">⋮</button>
+ <div id={ "account-menu-" + itoa(u.ID) } class="account-menu" role="menu" aria-label={ "Aksi " + u.Username } popover="manual">
+ <button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/ubah") } hx-target="#modal">Ubah</button>
+ <button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/password") } hx-target="#modal">Password</button>
+ <a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/profil.json")) } download title="Profil berisi kredensial">JSON</a>
+ <a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/windows.ps1")) } download>Windows .ps1</a>
+ <a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/vpnaas-ca.crt")) } download>Download Sertifikat (.crt)</a>
+ <button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/akun", u.ID, "/hapus") } hx-target="#modal">Hapus</button>
+ </div>
+ </div>
+}
+
+templ PasswordForm(id int, username, errMsg, fieldErr string) {
+	@Modal("Reset Password") {
+		<form hx-put={ idURL("/akun", id, "/password") } hx-target="#modal" class="space-y-4">
+			@ErrorBox(errMsg)
+			<input type="hidden" name="username" value={ username }/>
+			<p class="text-sm text-[#495057]">Atur password baru untuk <span class="font-mono font-semibold">{ username }</span>. Sesi aktif akun ini akan diputus oleh backend. Password tidak pernah ditampilkan kembali.</p>
+			@field("Password baru", "password", "", "password", fieldErr, "8-128 karakter", true)
+			@formFooter("Reset Password")
+		</form>
+	}
+}
+
+// ---------- Kebijakan ----------
+
+templ PoliciesPage(t PolicyTable) {
+	@PageHeader("Kebijakan Jaringan", "Tentukan trafik yang diizinkan melewati jaringan privat. Selain itu, forwarding VPN ditolak.", PrimaryButton("Buat Kebijakan", "/kebijakan/baru"))
+	@VPNTabs("kebijakan")
+	@PoliciesTable(t)
+}
+
+templ PoliciesTable(t PolicyTable) {
+	<section id="policies-table" class="rounded-xl border border-[#DEE2E6]" hx-get="/kebijakan/tabel" hx-trigger="vpnaas:changed from:body" hx-swap="outerHTML" hx-include="this" hx-disinherit="*">
+		@tableHead(len(t.Rows), t.Total, "/kebijakan/tabel", "#policies-table", t.Query, "Cari kebijakan…")
+		<div class="px-5 pt-4 empty:hidden">
+			@FlashBox(t.Flash)
+			@ErrorBox(t.Err)
+		</div>
+		if len(t.Rows) == 0 {
+			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada kebijakan", "Buat kebijakan untuk mengizinkan trafik antar CIDR.")
+		} else {
+			<div class="overflow-x-auto pb-1" tabindex="0" aria-label="Tabel dapat digeser horizontal">
+				<table class="min-w-full text-sm">
+					<thead class="bg-[#E9ECEF]">
+						<tr>
+							@th("Nama Kebijakan")
+							@th("CIDR Sumber")
+							@th("CIDR Tujuan")
+							@th("Protokol")
+							@th("Status")
+							@th("Aksi")
+						</tr>
+					</thead>
+					<tbody>
+						for _, p := range t.Rows {
+							<tr class="border-t border-[#DEE2E6] hover:bg-[#F8F9FA]">
+								<td class="whitespace-nowrap px-3 py-3 font-semibold text-[#2F6BC4]">{ p.Name }</td>
+								<td class="px-3 py-3 font-mono">{ p.SourceCIDR }</td>
+								<td class="px-3 py-3 font-mono">{ p.DestinationCIDR }</td>
+								<td class="px-3 py-3">{ upper(p.Protocol) }</td>
+								<td class="px-3 py-3">
+									@Badge(p.AdminLabel())
+								</td>
+								<td class="px-3 py-3">
+									<div class="flex min-w-[240px] max-w-[320px] flex-wrap gap-1.5">
+										@rowBtn("Ubah", "get", idURL("/kebijakan", p.ID, "/ubah"), "#modal", false)
+										@rowBtn("Hapus", "get", idURL("/kebijakan", p.ID, "/hapus"), "#modal", true)
+									</div>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</section>
+}
+
+templ PolicyForm(f Form) {
+	@Modal(ternary(f.Edit(), "Ubah Kebijakan", "Buat Kebijakan")) {
+		<form
+			if f.Edit() {
+				hx-put={ idURL("/kebijakan", f.ID, "") }
+			} else {
+				hx-post="/kebijakan"
+			}
+			hx-target="#modal"
+			class="space-y-4"
+		>
+			@ErrorBox(f.Err)
+			@field("Nama kebijakan", "name", f.V("name"), "text", f.E("name"), "", true)
+			@field("CIDR sumber", "source_cidr", f.V("source_cidr"), "text", f.E("source_cidr"), "Contoh: 10.250.0.0/24 (pool C2S)", true)
+			@field("CIDR tujuan", "destination_cidr", f.V("destination_cidr"), "text", f.E("destination_cidr"), "Contoh: 10.10.7.0/24", true)
+			<label class="block text-sm font-semibold">
+				Protokol
+				<select name="protocol" class={ inputClass(f.E("protocol")) }>
+					for _, p := range []string{"all", "tcp", "udp", "icmp"} {
+						<option value={ p } selected?={ f.V("protocol") == p }>{ upper(p) }</option>
+					}
+				</select>
+				if f.E("protocol") != "" {
+					<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("protocol") }</span>
+				}
+			</label>
+			@enabledBox(f.Enabled)
+			@formFooter(ternary(f.Edit(), "Simpan", "Buat"))
+		</form>
+	}
+}

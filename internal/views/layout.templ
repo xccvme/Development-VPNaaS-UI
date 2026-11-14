@@ -1,0 +1,264 @@
+package views
+
+templ icon(name string) {
+	<svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		switch name {
+			case "grid":
+				<rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect>
+			case "link":
+				<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"></path><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"></path>
+			case "user":
+				<circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-6 8-6s8 2 8 6"></path>
+			case "shield":
+				<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path>
+			case "pulse":
+				<path d="M3 12h4l3-8 4 16 3-8h4"></path>
+			case "clock":
+				<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>
+			case "menu":
+				<path d="M4 6h16M4 12h16M4 18h16"></path>
+			case "plus":
+				<circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path>
+			case "refresh":
+				<path d="M20 11a8 8 0 0 0-14-5l-2 2M4 13a8 8 0 0 0 14 5l2-2"></path><path d="M4 4v4h4M20 20v-4h-4"></path>
+			case "logout":
+				<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"></path><path d="M10 17l-5-5 5-5M5 12h11"></path>
+			case "download":
+				<path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path>
+		}
+	</svg>
+}
+
+templ head(title string, csrf string) {
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false,"historyCacheSize":0,"selfRequestsOnly":true}'/>
+		if csrf != "" {
+			<meta name="csrf-token" content={ csrf }/>
+		}
+		<title>{ title } · VPNaaS Console</title>
+		<link rel="icon" type="image/png" href={ "/static/vpn-logo.png?v=" + AssetVersion }/>
+		<link rel="stylesheet" href={ "/static/app.css?v=" + AssetVersion }/>
+		<script src={ "/static/htmx.min.js?v=" + AssetVersion } defer></script>
+		<script src={ "/static/app.js?v=" + AssetVersion } defer></script>
+	</head>
+}
+
+templ Layout(p Page, content templ.Component) {
+	<!DOCTYPE html>
+	<html lang="id">
+		@head(p.Title, p.CSRF)
+		<body class="min-h-screen bg-white text-[#212529] antialiased">
+			<aside id="sidebar" class="fixed inset-y-0 left-0 z-40 flex w-[260px] -translate-x-full flex-col bg-gradient-to-b from-[#2C3E87] to-[#3A55A6] text-white transition-transform lg:translate-x-0">
+				<div class="flex h-[70px] items-center gap-3 px-6">
+					<img src={ "/static/vpn-logo.png?v=" + AssetVersion } alt="Logo VPNaaS" width="44" height="44" class="h-11 w-11 shrink-0 object-contain"/>
+					<div>
+						<div class="text-lg font-bold leading-tight">VPNaaS</div>
+						<div class="text-xs text-white/70">Console PoC</div>
+					</div>
+				</div>
+				<nav class="mt-4 flex-1 space-y-1 overflow-y-auto px-3" aria-label="Navigasi utama">
+					for _, n := range Nav {
+						<a
+							href={ templ.URL(n.Href) }
+							class={ "flex items-center gap-3 rounded-lg px-4 py-3 text-[15px] transition-colors hover:bg-white/10",
+								templ.KV("bg-white/15 font-semibold text-white", n.Key == p.Active),
+								templ.KV("text-white/80", n.Key != p.Active) }
+							if n.Key == p.Active {
+								aria-current="page"
+							}
+						>
+							@icon(n.Icon)
+							<span>{ n.Label }</span>
+						</a>
+					}
+				</nav>
+				<div class="px-6 py-4 text-xs text-white/60">IPsec IKEv2 · strongSwan</div>
+			</aside>
+			<div id="backdrop" class="fixed inset-0 z-30 hidden bg-black/30 lg:hidden" data-sidebar-close></div>
+			<div class="lg:pl-[260px]">
+				<header class="sticky top-0 z-20 flex h-[70px] items-center justify-between bg-white px-4 shadow-[0_2px_8px_rgba(33,37,41,0.08)] sm:px-8">
+					<button type="button" class="rounded-md p-2 text-[#2F6BC4] hover:bg-[#F1F3F5] lg:hidden" data-sidebar-toggle aria-label="Buka menu">
+						@icon("menu")
+					</button>
+					<div class="hidden text-sm text-[#6C757D] lg:block">VPN as a Service · Proof of Concept</div>
+					<div class="flex items-center gap-3">
+						<span class="hidden items-center gap-2 text-sm text-[#495057] sm:flex">
+							<span class="grid h-8 w-8 place-items-center rounded-full bg-[#E8EEF9] font-semibold text-[#2F6BC4]">A</span>
+							admin
+						</span>
+						<form method="post" action="/logout">
+							<input type="hidden" name="csrf_token" value={ p.CSRF }/>
+							<button type="submit" class="inline-flex items-center gap-2 rounded-full border border-[#DEE2E6] px-4 py-2 text-sm font-semibold text-[#212529] hover:bg-[#F8F9FA]">
+								@icon("logout")
+								<span>Keluar</span>
+							</button>
+						</form>
+					</div>
+				</header>
+				<main class="mx-auto max-w-[1440px] px-4 py-8 sm:px-8">
+					<div id="toast" class="mb-4 hidden rounded-lg border border-[#F5C2C7] bg-[#FDECEA] px-4 py-3 text-sm text-[#B3261E]" role="alert"></div>
+					@content
+				</main>
+			</div>
+			<div id="modal"></div>
+		</body>
+	</html>
+}
+
+templ PageHeader(title, subtitle string, action templ.Component) {
+	<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+		<div>
+			<h1 class="text-[28px] font-bold leading-tight text-[#212529] sm:text-[30px]">{ title }</h1>
+			<p class="mt-1 text-[15px] text-[#6C757D]">{ subtitle }</p>
+		</div>
+		if action != nil {
+			<div class="flex flex-wrap items-center gap-2">
+				@action
+			</div>
+		}
+	</div>
+}
+
+templ VPNTabs(active string) {
+	<div class="no-scrollbar mb-6 flex gap-6 overflow-x-auto overflow-y-hidden border-b border-[#DEE2E6] text-[15px]" role="tablist">
+		@tab("koneksi", "Koneksi S2S", "/koneksi", active)
+		@tab("akun", "Akun C2S", "/akun", active)
+		@tab("kebijakan", "Kebijakan", "/kebijakan", active)
+	</div>
+}
+
+templ tab(key, label, href, active string) {
+	<a
+		href={ templ.URL(href) }
+		role="tab"
+		class={ "-mb-px whitespace-nowrap border-b-[3px] px-1 pb-3",
+			templ.KV("border-[#1A73E8] font-semibold text-[#1A73E8]", key == active),
+			templ.KV("border-transparent text-[#6C757D] hover:text-[#212529]", key != active) }
+		if key == active {
+			aria-selected="true"
+		}
+	>{ label }</a>
+}
+
+templ PrimaryButton(label, getURL string) {
+	<button type="button" hx-get={ getURL } hx-target="#modal" class="inline-flex items-center gap-2 rounded-full bg-[#2F6BC4] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#2559A8]">
+		@icon("plus")
+		<span>{ label }</span>
+	</button>
+}
+
+templ RefreshButton(target, url string) {
+	<button type="button" hx-get={ url } hx-target={ target } hx-swap="outerHTML" aria-label="Muat ulang" title="Muat ulang" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#CED4DA] bg-white px-3 py-2 sm:px-4 text-sm font-semibold text-[#212529] hover:bg-[#F8F9FA]">
+		@icon("refresh")
+		<span class="hidden sm:inline">Muat ulang</span>
+	</button>
+}
+
+templ Actions(primary templ.Component, target, url string) {
+	@RefreshButton(target, url)
+	if primary != nil {
+		@primary
+	}
+}
+
+templ Badge(label string) {
+	<span class={ "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold", badgeClass(label) }>{ label }</span>
+}
+
+templ Dot(label string) {
+	<span class={ "inline-block h-2.5 w-2.5 rounded-full", dotClass(label) } aria-hidden="true"></span>
+}
+
+templ FlashBox(f *Flash) {
+	if f != nil {
+		<div class={ "mb-4 rounded-lg border px-4 py-3 text-sm", templ.KV("border-[#F5C2C7] bg-[#FDECEA] text-[#B3261E]", f.Error), templ.KV("border-[#BADBCC] bg-[#E6F4EA] text-[#1E7B34]", !f.Error) } role="status">
+			<div class="font-semibold">{ f.Message }</div>
+			if f.Output != "" {
+				<pre class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-white/70 p-2 font-mono text-xs text-[#212529]">{ f.Output }</pre>
+			}
+		</div>
+	}
+}
+
+templ ErrorBox(msg string) {
+	if msg != "" {
+		<div class="mb-4 rounded-lg border border-[#F5C2C7] bg-[#FDECEA] px-4 py-3 text-sm text-[#B3261E]" role="alert">{ msg }</div>
+	}
+}
+
+templ Empty(title, detail string) {
+	<div class="px-6 py-14 text-center">
+		<div class="text-base font-semibold text-[#212529]">{ title }</div>
+		<div class="mt-1 text-sm text-[#6C757D]">{ detail }</div>
+	</div>
+}
+
+templ SearchBox(url, target, q, placeholder string) {
+	<input
+		id={ "search-" + target[1:] }
+		type="search"
+		name="q"
+		value={ q }
+		placeholder={ placeholder }
+		aria-label={ placeholder }
+		hx-get={ url }
+		hx-trigger="input changed delay:300ms, search"
+		hx-target={ target }
+		hx-swap="outerHTML"
+		class="w-full min-w-0 rounded-full border border-[#CED4DA] px-4 py-2 text-sm focus:border-[#2F6BC4] focus:outline-none focus:ring-2 focus:ring-[#2F6BC4]/20 sm:w-72"
+	/>
+}
+
+templ th(label string) {
+	<th class="whitespace-nowrap px-3 py-3 text-left text-sm font-semibold text-[#212529]">{ label }</th>
+}
+
+templ rowBtn(label, method, url, target string, danger bool) {
+	<button
+		type="button"
+		if method == "get" {
+			hx-get={ url }
+		} else {
+			hx-post={ url }
+		}
+		hx-target={ target }
+		class={ "rounded-full border px-3 py-1 text-xs font-semibold whitespace-nowrap",
+			templ.KV("border-[#F5C2C7] text-[#B3261E] hover:bg-[#FDECEA]", danger),
+			templ.KV("border-[#CED4DA] text-[#2F6BC4] hover:bg-[#E8EEF9]", !danger) }
+	>{ label }</button>
+}
+
+templ Login(errMsg, username string) {
+	<!DOCTYPE html>
+	<html lang="id">
+		@head("Masuk", "")
+		<body class="grid min-h-screen place-items-center bg-gradient-to-b from-[#2C3E87] to-[#3A55A6] px-4">
+			<main class="w-full max-w-sm rounded-xl bg-white p-8 shadow-xl">
+				<div class="mb-6 flex items-center gap-3">
+					<span class="grid h-10 w-10 place-items-center rounded-lg bg-[#2F6BC4] font-bold text-white">V</span>
+					<div>
+						<h1 class="text-xl font-bold">VPNaaS Console</h1>
+						<p class="text-sm text-[#6C757D]">Masuk untuk mengelola VPN</p>
+					</div>
+				</div>
+				<form id="login-form" method="post" action="/login" class="space-y-4">
+					<label class="block text-sm font-semibold">
+						Username
+						<input name="username" value={ username } required autocomplete="username" class="mt-1 w-full rounded-md border border-[#CED4DA] px-3 py-2 font-normal focus:border-[#2F6BC4] focus:outline-none focus:ring-2 focus:ring-[#2F6BC4]/20"/>
+					</label>
+					<label class="block text-sm font-semibold">
+						Password
+						<input name="password" type="password" required autocomplete="current-password" class="mt-1 w-full rounded-md border border-[#CED4DA] px-3 py-2 font-normal focus:border-[#2F6BC4] focus:outline-none focus:ring-2 focus:ring-[#2F6BC4]/20"/>
+					</label>
+					if errMsg != "" {
+						<p class="text-sm text-[#B3261E]" role="alert">{ errMsg }</p>
+					}
+					<button type="submit" class="w-full rounded-full bg-[#2F6BC4] px-5 py-2.5 font-semibold text-white hover:bg-[#2559A8]">Masuk</button>
+					<p class="text-center text-xs text-[#6C757D]">Login PoC: admin / admin</p>
+				</form>
+			</main>
+		</body>
+	</html>
+}

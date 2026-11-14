@@ -1,0 +1,1 @@
+{"server": "192.0.2.10", "server_id": "192.0.2.10", "ca_certificate": "-----BEGIN CERTIFICATE-----\nY2VydA==\n-----END CERTIFICATE-----", "allowed_cidrs": ["10.10.7.0/24"], "password": "DO-NOT-EXPORT", "traffic_mode": "split"}

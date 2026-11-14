@@ -1,0 +1,9 @@
+**/.git
+.env
+.env.*
+.session*
+bin
+evidence
+dokumentasi
+tests
+__pycache__

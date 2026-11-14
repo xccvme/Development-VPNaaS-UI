@@ -1,0 +1,1 @@
+{"server": "vpn.example.com", "server_id": null, "ca_certificate": "  -----BEGIN CERTIFICATE-----\r\nQUJD\r\nREVG\n-----END CERTIFICATE-----\n", "allowed_cidrs": ["10.10.7.0/24", "192.168.1.0/24", "10.10.7.0/24", "2001:DB8:0::/32", "10.1.2.3"]}

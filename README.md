@@ -210,16 +210,16 @@ Endpoint backend yang diproxy UI (allowlist ketat): `GET /api/connections/{id}/s
 
 ## Tampilan aplikasi
 
-Tangkapan layar aplikasi nyata; bilah alamat browser tidak disertakan dan nilai subnet akun ditutup dengan label **DISAMARKAN** untuk publikasi. Status dan jumlah sesi tidak diubah. Bukan bukti pengujian koneksi Windows.
+Tangkapan layar langsung dari aplikasi yang berjalan, bukan mockup. IP publik ditutup dengan label **IP PUBLIK DISAMARKAN** untuk publikasi; subnet privat tetap ditampilkan. Status, jumlah sesi, dan penghitung trafik tidak diubah. Bukan bukti pengujian koneksi Windows.
 
-### Login
+### VPN Hub — status Site-A dan Site-B
 
-![Halaman login](dokumentasi/images/login.png)
+![VPN Hub dengan status masing-masing site](dokumentasi/images/vpn-hub.png)
 
-### Daftar akun
+### Ubah VPN Hub — konfigurasi Site-A dan Site-B
 
-![Daftar akun C2S](dokumentasi/images/akun.png)
+![Form konfigurasi kedua site, subnet LAN, dan NAT](dokumentasi/images/ubah-vpn-hub.png)
 
-### Ubah akun
+### Daftar akun C2S
 
-![Modal ubah akun](dokumentasi/images/ubah-akun.png)
+![Daftar akun C2S dengan status dan batas sesi](dokumentasi/images/akun.png)

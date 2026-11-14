@@ -119,3 +119,18 @@
     hiddenSince = 0;
   });
 })();
+
+// Client-side CIDR list check (server validates again): one IPv4 CIDR per
+// line or comma, max 8. Shows the browser's native validity message.
+(function () {
+  var re = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}\/(3[0-2]|[12]?\d)$/;
+  function check(el) {
+    var items = el.value.split(/[\s,]+/).filter(Boolean);
+    var bad = items.filter(function (x) { return !re.test(x); });
+    var msg = bad.length ? "CIDR IPv4 tidak valid: " + bad[0] : items.length > 8 ? "Maksimal 8 subnet" : "";
+    el.setCustomValidity(msg);
+  }
+  document.addEventListener("input", function (e) {
+    if (e.target.matches && e.target.matches("textarea[data-cidr-list]")) check(e.target);
+  });
+})();

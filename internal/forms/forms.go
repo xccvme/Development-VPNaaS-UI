@@ -169,6 +169,119 @@ func Connection(v url.Values, create bool) (map[string]any, Errors) {
 // MaxSelectors is the per-side S2S subnet limit accepted by the backend.
 const MaxSelectors = 8
 
+// AnyAddress is the strongSwan wildcard for a spoke behind NAT / dynamic IP.
+const AnyAddress = "%any"
+
+var hostnameRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?)*$`)
+
+// SiteKeys are the two hub spokes; form fields are prefixed "site_a_"/"site_b_".
+var SiteKeys = []string{"a", "b"}
+
+// Checkbox reads a checkbox paired with a hidden "0" marker: absent entirely
+// means default (true), present without "on" means unchecked.
+func Checkbox(v url.Values, k string, def bool) bool {
+	vals, ok := v[k]
+	if !ok {
+		return def
+	}
+	for _, x := range vals {
+		switch x {
+		case "on", "true", "1":
+			return true
+		}
+	}
+	return false
+}
+
+// validSpokeAddress: %any, an IPv4 address, or a DNS hostname (not an IPv6/other IP).
+func validSpokeAddress(addr string) bool {
+	if addr == AnyAddress {
+		return true
+	}
+	if a, err := netip.ParseAddr(addr); err == nil {
+		return a.Is4()
+	}
+	return len(addr) <= 253 && hostnameRe.MatchString(addr) && !numericRe.MatchString(addr)
+}
+
+var numericRe = regexp.MustCompile(`^[0-9.]+$`)
+
+func overlaps(a, b []string) string {
+	for _, x := range a {
+		px, err := netip.ParsePrefix(x)
+		if err != nil {
+			continue
+		}
+		for _, y := range b {
+			py, err := netip.ParsePrefix(y)
+			if err == nil && px.Masked().Overlaps(py.Masked()) {
+				return y
+			}
+		}
+	}
+	return ""
+}
+
+// Hub builds a VPN Hub (topology "hub") POST/PUT body from site_a_*/site_b_*
+// fields. Empty address -> %any; empty IKE ID omitted (backend default);
+// PSK write-only: empty is omitted (generate on create, keep on edit).
+func Hub(v url.Values, create bool) (map[string]any, Errors) {
+	errs := Errors{}
+	body := map[string]any{"enabled": enabled(v), "topology": "hub"}
+	name := get(v, "name")
+	if !safeRe.MatchString(name) {
+		errs["name"] = "Nama 1-128 karakter: huruf, angka, _ @ . : -"
+	}
+	body["name"] = name
+	subnets := map[string][]string{}
+	for _, s := range SiteKeys {
+		p := "site_" + s + "_"
+		label := "Site-" + strings.ToUpper(s)
+		site := map[string]any{}
+		sn := get(v, p+"name")
+		if !safeRe.MatchString(sn) {
+			errs[p+"name"] = "Nama site " + label + " wajib, 1-128 karakter: huruf, angka, _ @ . : -"
+		}
+		site["name"] = sn
+		addr := get(v, p+"address")
+		if addr == "" {
+			addr = AnyAddress
+		}
+		if !validSpokeAddress(addr) {
+			errs[p+"address"] = "Alamat publik harus IPv4 atau hostname (kosongkan jika di belakang NAT)"
+		}
+		site["address"] = addr
+		if id := get(v, p+"id"); id != "" {
+			if !safeRe.MatchString(id) {
+				errs[p+"id"] = "IKE ID hanya huruf, angka, _ @ . : - (maks. 128)"
+			}
+			site["id"] = id
+		}
+		if psk := v.Get(p + "psk"); psk != "" {
+			if !credentialRe.MatchString(psk) {
+				errs[p+"psk"] = "PSK 8-128 karakter: huruf, angka, _ @ . ! + , : / = -"
+			}
+			site["psk"] = psk
+		}
+		list := SplitList(v.Get(p + "subnets"))
+		if len(list) == 0 {
+			errs[p+"subnets"] = "Subnet LAN " + label + " wajib diisi"
+		} else if msg := selectorError(list); msg != "" {
+			errs[p+"subnets"] = msg
+		}
+		subnets[s] = list
+		site["subnets"] = strings.Join(list, ",")
+		site["nat"] = Checkbox(v, p+"nat", true)
+		body["site_"+s] = site
+	}
+	if errs["site_a_subnets"] == "" && errs["site_b_subnets"] == "" {
+		if c := overlaps(subnets["a"], subnets["b"]); c != "" {
+			errs["site_b_subnets"] = "Subnet Site-B tumpang tindih dengan Site-A: " + c
+		}
+	}
+	return body, errs
+}
+
 func selectorError(cidrs []string) string {
 	if len(cidrs) > MaxSelectors {
 		return "Maksimal 8 subnet"

@@ -84,7 +84,7 @@ func TestConnectDisconnectWording(t *testing.T) {
 func TestS2SFormSubnets(t *testing.T) {
 	e := setup(t)
 	e.login()
-	_, form := e.do("GET", "/koneksi/baru", nil, map[string]string{"HX-Request": "true"})
+	_, form := e.do("GET", "/koneksi/baru?topology=direct", nil, map[string]string{"HX-Request": "true"})
 	for _, want := range []string{"Subnet LAN lokal (server ini)", "Subnet LAN remote (site lawan)", "Isi subnet yang boleh saling akses lewat tunnel. Di site lawan isinya dibalik.", "Remote ID", "PSK"} {
 		if !strings.Contains(form, want) {
 			t.Errorf("S2S form missing %q", want)

@@ -95,9 +95,117 @@ type Connection struct {
 	LocalTS       string `json:"local_ts"`
 	RemoteTS      string `json:"remote_ts"`
 	Enabled       bool   `json:"enabled"`
+	// Topology is "hub" for VPN Hub rows; missing/"direct" is a legacy S2S row.
+	Topology string `json:"topology"`
+	SiteA    *Site  `json:"site_a"`
+	SiteB    *Site  `json:"site_b"`
 }
 
 func (c Connection) AdminLabel() string { return adminLabel(c.Enabled) }
+
+// IsHub reports a hub-and-spoke row; anything else renders as legacy direct.
+func (c Connection) IsHub() bool { return c.Topology == "hub" }
+
+func (c Connection) TopologyLabel() string {
+	if c.IsHub() {
+		return "Hub"
+	}
+	return "Direct (lama)"
+}
+
+// A and B never return nil so templates can query legacy rows safely.
+func (c Connection) A() Site {
+	if c.SiteA == nil {
+		return Site{}
+	}
+	return *c.SiteA
+}
+
+func (c Connection) B() Site {
+	if c.SiteB == nil {
+		return Site{}
+	}
+	return *c.SiteB
+}
+
+// HubRuntime is Active only when both spokes are active, Unknown if either
+// spoke status is missing/unrecognised, otherwise Down.
+func (c Connection) HubRuntime() string {
+	a, b := c.A().StatusLabel(), c.B().StatusLabel()
+	switch {
+	case a == "Unknown" || b == "Unknown":
+		return "Unknown"
+	case a == "Active" && b == "Active":
+		return "Active"
+	}
+	return "Down"
+}
+
+// CSV accepts a backend comma-joined string or a JSON string array.
+type CSV string
+
+func (s *CSV) UnmarshalJSON(b []byte) error {
+	var str string
+	if json.Unmarshal(b, &str) == nil {
+		*s = CSV(str)
+		return nil
+	}
+	var arr []string
+	if err := json.Unmarshal(b, &arr); err != nil {
+		return err
+	}
+	*s = CSV(strings.Join(arr, ","))
+	return nil
+}
+
+// Site is one spoke of a VPN Hub. PSK is write-only: only psk_set is read.
+type Site struct {
+	Name       string `json:"name"`
+	Address    string `json:"address"`
+	ID         string `json:"id"`
+	PSKSet     bool   `json:"psk_set"`
+	Subnets    CSV    `json:"subnets"`
+	NAT        *bool  `json:"nat"`
+	Status     string `json:"status"`
+	RemoteHost string `json:"remote_host"`
+	BytesIn    *int64 `json:"bytes_in"`
+	BytesOut   *int64 `json:"bytes_out"`
+}
+
+func (s Site) SubnetList() []string { return SplitCSV(string(s.Subnets)) }
+
+// NATOn defaults to true (backend default) when the field is missing.
+func (s Site) NATOn() bool { return s.NAT == nil || *s.NAT }
+
+// BehindNAT: the spoke has no fixed public address (%any) and must dial in.
+func (s Site) BehindNAT() bool { return s.Address == "" || s.Address == "%any" }
+
+func (s Site) StatusLabel() string {
+	switch strings.ToLower(s.Status) {
+	case "active":
+		return "Active"
+	case "down":
+		return "Down"
+	}
+	return "Unknown"
+}
+
+var fileUnsafe = regexp.MustCompile(`[^A-Za-z0-9_.-]+`)
+
+// HubFile builds the download filename for a hub spoke, e.g.
+// HubFile("kantor","a","sh") = "Setup-Hub-kantor-Site-A.sh" and
+// HubFile("kantor","a","conf") = "Hub-kantor-Site-A.conf".
+func HubFile(name, site, kind string) string {
+	stem := strings.Trim(fileUnsafe.ReplaceAllString(name, "_"), ".")
+	if stem == "" {
+		stem = "_"
+	}
+	base := "Hub-" + stem + "-Site-" + strings.ToUpper(site)
+	if kind == "sh" {
+		return "Setup-" + base + ".sh"
+	}
+	return base + ".conf"
+}
 
 // SplitCSV splits a backend traffic-selector string ("a,b" or a legacy single
 // CIDR) into trimmed, non-empty items; nil when empty.

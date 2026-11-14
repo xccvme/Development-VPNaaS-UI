@@ -21,8 +21,8 @@ var (
 	ErrUnavailable = errors.New("VPN API tidak dapat dihubungi. Periksa SSH tunnel dan layanan backend.")
 	ErrNotAllowed  = errors.New("rute API tidak dikenal")
 
-	getRe    = regexp.MustCompile(`^(health|overview|connections|users|policies|status|audit|users/[^/]+/profile)$`)
-	postRe   = regexp.MustCompile(`^(connections|users|policies|connections/[^/]+/(initiate|terminate))$`)
+	getRe    = regexp.MustCompile(`^(health|overview|connections|users|policies|status|audit|users/[^/]+/profile|connections/[^/]+/sites/[ab]/config)$`)
+	postRe   = regexp.MustCompile(`^(connections|users|policies|connections/[^/]+/(initiate|terminate)|connections/[^/]+/sites/[ab]/(connect|disconnect))$`)
 	itemRe   = regexp.MustCompile(`^(connections|users|policies)/[^/]+$`)
 	maxReply = int64(8 << 20)
 )

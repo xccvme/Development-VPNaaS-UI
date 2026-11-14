@@ -108,6 +108,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("DELETE /koneksi/{id}", s.mutating(s.remove("connections")))
 	s.mux.HandleFunc("POST /koneksi/{id}/initiate", s.mutating(s.connectionAction("initiate")))
 	s.mux.HandleFunc("POST /koneksi/{id}/terminate", s.mutating(s.connectionAction("terminate")))
+	s.mux.HandleFunc("GET /koneksi/{id}/site/{site}/configure", s.authed(s.hubConfigure))
+	s.mux.HandleFunc("GET /koneksi/{id}/site/{site}/disconnect", s.authed(s.confirmSiteDisconnect))
+	s.mux.HandleFunc("POST /koneksi/{id}/site/{site}/connect", s.mutating(s.siteAction("connect")))
+	s.mux.HandleFunc("POST /koneksi/{id}/site/{site}/disconnect", s.mutating(s.siteAction("disconnect")))
 
 	s.mux.HandleFunc("GET /akun", s.authed(s.users))
 	s.mux.HandleFunc("GET /akun/tabel", s.authed(s.users))
@@ -133,6 +137,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /unduh/akun/{id}/vpnaas-ca.crt", s.authed(s.downloadCertificate))
 	s.mux.HandleFunc("GET /unduh/akun/{id}/profil.json", s.authed(s.downloadProfile))
 	s.mux.HandleFunc("GET /unduh/akun/{id}/windows.ps1", s.authed(s.downloadWindows))
+	s.mux.HandleFunc("GET /unduh/koneksi/{id}/{site}/{file}", s.authed(s.downloadHubSite))
 	s.mux.HandleFunc("GET /downloads/users/{id}/windows.ps1", s.authed(s.downloadWindows)) // legacy URL
 
 	s.mux.HandleFunc("/api/{path...}", s.proxy)
@@ -327,7 +332,11 @@ func (s *Server) fetchConnections(r *http.Request) ([]views.ConnRow, string, str
 	}
 	rows := make([]views.ConnRow, 0, len(conns))
 	for _, c := range conns {
-		rows = append(rows, views.ConnRow{Connection: c, Runtime: model.ConnectionRuntime(raw, available, c.ID)})
+		rt := model.ConnectionRuntime(raw, available, c.ID)
+		if c.IsHub() {
+			rt = c.HubRuntime() // hub spokes carry their own runtime status
+		}
+		rows = append(rows, views.ConnRow{Connection: c, Runtime: rt})
 	}
 	return rows, errText(cerr), errText(serr)
 }
@@ -409,15 +418,29 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, sess auth.Sess
 	}
 	connNote := "Data tidak tersedia"
 	if cerr == "" {
-		up := 0
-		for _, c := range conns {
-			if c.Runtime == "Active" {
+		// Hub rows count each spoke (Site-A, Site-B); direct rows count once.
+		up, dn, unk := 0, 0, 0
+		tally := func(label string) {
+			switch label {
+			case "Active":
 				up++
+			case "Down":
+				dn++
+			default:
+				unk++
 			}
 		}
-		connNote = strconv.Itoa(up) + " tunnel Active"
-		if serr != "" {
-			connNote = "Runtime Unknown"
+		for _, c := range conns {
+			if c.IsHub() {
+				tally(c.A().StatusLabel())
+				tally(c.B().StatusLabel())
+			} else {
+				tally(c.Runtime)
+			}
+		}
+		connNote = strconv.Itoa(up) + " Active · " + strconv.Itoa(dn) + " Down"
+		if unk > 0 {
+			connNote += " · " + strconv.Itoa(unk) + " Unknown"
 		}
 	}
 	gw := "Unknown"
@@ -425,7 +448,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, sess auth.Sess
 		gw = "Active"
 	}
 	o.Cards = []views.Card{
-		{Label: "Koneksi S2S", Value: count(len(conns), cerr), Note: connNote, Href: "/koneksi", Ok: cerr == "" && serr == ""},
+		{Label: "VPN Hub", Value: count(len(conns), cerr), Note: connNote, Href: "/koneksi", Ok: cerr == "" && serr == ""},
 		{Label: "Akun C2S", Value: count(len(users), uerr), Note: userNote, Href: "/akun", Ok: uerr == "" && unknown == 0},
 		{Label: "Firewall Rules", Value: count(len(policies), errText(perr)), Note: "Allow rule forwarding antar jaringan", Href: "/kebijakan", Ok: perr == nil},
 		{Label: "Telemetri Gateway", Value: gw, Note: "Respons endpoint status runtime", Href: "/status", Ok: serr == ""},
@@ -494,7 +517,7 @@ func (s *Server) connections(w http.ResponseWriter, r *http.Request, sess auth.S
 		render(w, r, views.ConnectionsTable(t))
 		return
 	}
-	s.page(w, r, sess, "koneksi", "Koneksi S2S", views.ConnectionsPage(t))
+	s.page(w, r, sess, "koneksi", "VPN Hub", views.ConnectionsPage(t))
 }
 
 func (s *Server) userTable(r *http.Request, flash *views.Flash) views.UserTable {
@@ -633,6 +656,17 @@ func (s *Server) loadForm(w http.ResponseWriter, r *http.Request, kind string, k
 }
 
 func (s *Server) connectionForm(w http.ResponseWriter, r *http.Request, _ auth.Session) {
+	if r.PathValue("id") == "" && r.URL.Query().Get("topology") != "direct" {
+		f := views.Form{Values: map[string]string{"site_a_nat": "on", "site_b_nat": "on"}, Enabled: true}
+		render(w, r, views.HubForm(f))
+		return
+	}
+	if id, ok := pathID(r); ok {
+		if row, err := s.findRecord(r, "connections", id); err == nil && strVal(row, "topology") == "hub" {
+			render(w, r, views.HubForm(hubFormValues(id, row)))
+			return
+		}
+	}
 	if f, ok := s.loadForm(w, r, "connections", []string{"name", "remote_address", "remote_id", "local_ts", "remote_ts"}, nil); ok {
 		// Stored selectors are comma lists; the textarea shows one CIDR per line.
 		for _, k := range []string{"local_ts", "remote_ts"} {
@@ -640,6 +674,30 @@ func (s *Server) connectionForm(w http.ResponseWriter, r *http.Request, _ auth.S
 		}
 		render(w, r, views.ConnectionForm(f))
 	}
+}
+
+// hubFormValues maps a hub record onto site_a_*/site_b_* form fields.
+// PSK is never prefilled; %any is shown as an empty address.
+func hubFormValues(id int, row map[string]any) views.Form {
+	f := views.Form{ID: id, Values: map[string]string{"name": strVal(row, "name")}}
+	f.Enabled, _ = row["enabled"].(bool)
+	if _, has := row["enabled"]; !has {
+		f.Enabled = true
+	}
+	for _, k := range forms.SiteKeys {
+		site, _ := row["site_"+k].(map[string]any)
+		p := "site_" + k + "_"
+		f.Values[p+"name"] = strVal(site, "name")
+		if a := strVal(site, "address"); a != forms.AnyAddress {
+			f.Values[p+"address"] = a
+		}
+		f.Values[p+"id"] = strVal(site, "id")
+		f.Values[p+"subnets"] = strings.Join(forms.SplitList(strVal(site, "subnets")), "\n")
+		if nat, ok := site["nat"].(bool); !ok || nat {
+			f.Values[p+"nat"] = "on"
+		}
+	}
+	return f
 }
 
 func (s *Server) userForm(w http.ResponseWriter, r *http.Request, _ auth.Session) {
@@ -668,11 +726,16 @@ func formFromRequest(r *http.Request, id int) views.Form {
 	f := views.Form{ID: id, Values: map[string]string{}}
 	r.ParseForm()
 	for k := range r.PostForm {
-		if k != "password" && k != "psk" && k != "csrf_token" {
+		if k != "password" && !strings.HasSuffix(k, "psk") && k != "csrf_token" {
 			f.Values[k] = r.PostForm.Get(k)
 		}
 	}
 	f.Enabled = r.PostForm.Get("enabled") == "on"
+	for _, k := range forms.SiteKeys {
+		if _, has := r.PostForm["site_"+k+"_nat"]; has {
+			f.Values["site_"+k+"_nat"] = ternary(forms.Checkbox(r.PostForm, "site_"+k+"_nat", true), "on", "")
+		}
+	}
 	return f
 }
 
@@ -720,6 +783,11 @@ func (s *Server) saveUser(w http.ResponseWriter, r *http.Request, _ auth.Session
 }
 
 func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request, _ auth.Session) {
+	r.ParseForm()
+	if r.PostForm.Get("topology") == "hub" {
+		s.save(w, r, "connections", "VPN Hub", forms.Hub, views.HubForm)
+		return
+	}
 	s.save(w, r, "connections", "Koneksi", forms.Connection, views.ConnectionForm)
 }
 
@@ -837,6 +905,141 @@ func (s *Server) connectionAction(action string) handler {
 		w.Header().Set("HX-Trigger", `{"vpnaas:close":true}`)
 		render(w, r, views.ConnectionsTable(t))
 	}
+}
+
+// ---------- VPN Hub per-site ----------
+
+// hubSite resolves {id}/{site} to a hub record; legacy rows and unknown site
+// letters are 404 so per-site routes never touch direct connections.
+func (s *Server) hubSite(w http.ResponseWriter, r *http.Request, site string) (views.HubSite, bool) {
+	id, ok := pathID(r)
+	if !ok || (site != "a" && site != "b") {
+		http.NotFound(w, r)
+		return views.HubSite{}, false
+	}
+	h := views.HubSite{ID: id, Key: site, Name: "ID " + strconv.Itoa(id)}
+	ctx, cancel := s.ctx(r)
+	defer cancel()
+	var conns []model.Connection
+	if _, err := s.up.JSON(ctx, "GET", "connections", nil, &conns); err != nil {
+		h.Err = err.Error()
+		return h, true
+	}
+	for _, c := range conns {
+		if c.ID == id {
+			if !c.IsHub() {
+				http.NotFound(w, r)
+				return h, false
+			}
+			h.Name = c.Name
+			if site == "a" {
+				h.Site = c.A()
+			} else {
+				h.Site = c.B()
+			}
+			return h, true
+		}
+	}
+	h.Err = "data tidak ditemukan (mungkin sudah dihapus)"
+	return h, true
+}
+
+func (s *Server) hubConfigure(w http.ResponseWriter, r *http.Request, _ auth.Session) {
+	if h, ok := s.hubSite(w, r, r.PathValue("site")); ok {
+		render(w, r, views.HubConfigure(h))
+	}
+}
+
+func (s *Server) confirmSiteDisconnect(w http.ResponseWriter, r *http.Request, _ auth.Session) {
+	h, ok := s.hubSite(w, r, r.PathValue("site"))
+	if !ok {
+		return
+	}
+	render(w, r, views.ConfirmModal(views.Confirm{
+		Title: "Disconnect " + h.Label(), Message: "Putus tunnel " + h.Label() + " dari hub sekarang? Trafik LAN " + h.Label() + " ⇄ " + h.Peer() + " akan terhenti; bisa connect ulang kapan saja.",
+		Name: h.Name + " · " + h.Label(), URL: "/koneksi/" + strconv.Itoa(h.ID) + "/site/" + h.Key + "/disconnect", Button: "Disconnect", Err: h.Err,
+	}))
+}
+
+func (s *Server) siteAction(action string) handler {
+	label := map[string]string{"connect": "Connect", "disconnect": "Disconnect"}[action]
+	return func(w http.ResponseWriter, r *http.Request, _ auth.Session) {
+		id, ok := pathID(r)
+		site := r.PathValue("site")
+		if !ok || (site != "a" && site != "b") {
+			http.NotFound(w, r)
+			return
+		}
+		ctx, cancel := s.ctx(r)
+		defer cancel()
+		var out map[string]any
+		_, err := s.up.JSON(ctx, "POST", "connections/"+strconv.Itoa(id)+"/sites/"+site+"/"+action, nil, &out)
+		t := s.connTable(r, nil)
+		name := "ID " + strconv.Itoa(id)
+		for _, c := range t.Rows {
+			if c.ID == id {
+				name = c.Name
+			}
+		}
+		what := label + " Site-" + strings.ToUpper(site)
+		flash := &views.Flash{Message: what + " " + name + " berhasil"}
+		if err != nil {
+			flash = &views.Flash{Message: what + " gagal (" + name + "): " + err.Error(), Error: true}
+		} else if o, ok := out["output"].(string); ok {
+			flash.Output = o
+		}
+		t.Flash = flash
+		w.Header().Set("HX-Trigger", `{"vpnaas:close":true}`)
+		render(w, r, views.ConnectionsTable(t))
+	}
+}
+
+// hubFiles maps the UI download names to the backend config formats.
+var hubFiles = map[string]struct{ format, kind, ctype string }{
+	"setup.sh": {"script", "sh", "text/x-shellscript; charset=utf-8"},
+	"hub.conf": {"swanctl", "conf", "text/plain; charset=utf-8"},
+}
+
+// downloadHubSite proxies GET connections/{id}/sites/{a|b}/config as an
+// attachment named after the hub (Setup-Hub-<name>-Site-A.sh / Hub-<name>-Site-A.conf).
+func (s *Server) downloadHubSite(w http.ResponseWriter, r *http.Request, _ auth.Session) {
+	f, okFile := hubFiles[r.PathValue("file")]
+	seg := r.PathValue("site")
+	if !okFile || !strings.HasPrefix(seg, "site-") {
+		jsonError(w, http.StatusNotFound, "File tidak dikenal")
+		return
+	}
+	site := strings.TrimPrefix(seg, "site-")
+	id, ok := pathID(r)
+	if !ok || (site != "a" && site != "b") {
+		jsonError(w, http.StatusNotFound, "VPN Hub atau site tidak dikenal")
+		return
+	}
+	row, err := s.findRecord(r, "connections", id)
+	if err != nil {
+		jsonError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if strVal(row, "topology") != "hub" {
+		jsonError(w, http.StatusNotFound, "Bukan koneksi VPN Hub")
+		return
+	}
+	ctx, cancel := s.ctx(r)
+	defer cancel()
+	res, err := s.up.Do(ctx, "GET", "connections/"+strconv.Itoa(id)+"/sites/"+site+"/config", "format="+f.format, nil, "")
+	if err != nil {
+		jsonError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if !res.OK() {
+		jsonError(w, res.Status, res.Detail())
+		return
+	}
+	w.Header().Set("Content-Type", f.ctype)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+model.HubFile(strVal(row, "name"), site, f.kind)+`"`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Write(res.Body)
 }
 
 // ---------- downloads ----------
@@ -990,4 +1193,11 @@ func (s *Server) proxy(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(res.Status)
 		w.Write(res.Body)
 	})(w, r)
+}
+
+func ternary(c bool, a, b string) string {
+	if c {
+		return a
+	}
+	return b
 }

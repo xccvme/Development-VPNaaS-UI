@@ -195,6 +195,19 @@ Menu akun menyediakan **Profil VPN (.json)** (berisi kredensial; simpan dengan a
 
 Jalankan skrip dari **Windows PowerShell → Run as Administrator / Jalankan sebagai Administrator**, menggunakan akun Windows yang sama. Skrip berhenti dengan pesan jelas sebelum perubahan bila tidak elevated. Default **nama profil koneksi VPN** sama persis dengan username akun VPN, bukan nama NIC/adaptor fisik; tekan Enter untuk mempertahankan atau isi nama lain pada prompt opsional. Konfirmasi kepercayaan CA tetap diperlukan. Password VPN dimasukkan sendiri melalui dialog Windows, tidak disertakan dalam skrip. Split/full, proposal IKE/IPsec, dan impor CA tetap mengikuti profil. Setelah mengganti mode, unduh dan terapkan ulang saat VPN terputus lalu reconnect.
 
+## VPN Hub
+
+Menu **VPN Hub** (URL tetap `/koneksi`, dulu "Koneksi S2S") menghubungkan LAN dua site lewat server ini sebagai hub: **Site-A ⇄ Hub ⇄ Site-B**. Tiap site cukup membuat tunnel IPsec ke hub; hub meneruskan trafik antar kedua LAN sehingga client di Site-A bisa ping/akses Site-B dan sebaliknya.
+
+- **Buat VPN Hub**: isi Nama, lalu kartu **Site-A** dan **Site-B**: Nama site, Alamat publik (kosong = `%any`, site di belakang NAT yang memulai koneksi), IKE ID (opsional, default `<nama>-a@vpnaas`), PSK (opsional; kosong = generate otomatis, saat ubah kosong = tidak diubah; PSK tidak pernah ditampilkan ulang), Subnet LAN (1–8 CIDR IPv4, satu per baris atau koma; subnet kedua site tidak boleh tumpang tindih), dan NAT/masquerade (default aktif; aktifkan jika router LAN tidak punya route balik ke site lawan).
+- **Tabel**: Nama | Site-A | Site-B | Aksi, dengan status Active/Down per site, subnet, remote host, dan byte in/out. Refresh otomatis 30 detik (berhenti saat tab tersembunyi).
+- **Aksi ⋮**: Ubah, Configure Site-A/B (langkah setup), Download script Site-A/B (`Setup-Hub-<nama>-Site-A.sh`), Download config Site-A/B (`Hub-<nama>-Site-A.conf`, format swanctl), Connect/Disconnect per site (Disconnect minta konfirmasi), Hapus. Script dan config berisi PSK site; unduhan memerlukan login dan memakai `Cache-Control: no-store`.
+- **Setup site**: unduh script, salin ke gateway site (Linux), jalankan `sudo bash Setup-Hub-<nama>-Site-A.sh`, tunggu status menjadi Active. Gateway site harus mengaktifkan IP forwarding dan menjadi jalur LAN ke subnet site lawan. Site dengan alamat `%any` tidak bisa di-Connect dari hub (backend menjawab 409; pesannya ditampilkan di UI) — koneksi dimulai dari gateway site.
+- **Koneksi lama**: baris tanpa `topology` atau `topology: "direct"` tampil di bagian **Direct (lama)** dengan kolom dan aksi lama (Ubah lewat form lama, Connect/Disconnect, Hapus). Form lama tetap tersedia lewat tautan "Koneksi Direct (lama)" di form Buat VPN Hub (`/koneksi/baru?topology=direct`).
+- **Ringkasan**: kartu VPN Hub menghitung status per site (tiap hub = 2 site) ditambah koneksi direct.
+
+Endpoint backend yang diproxy UI (allowlist ketat): `GET /api/connections/{id}/sites/{a|b}/config?format=script|swanctl`, `POST /api/connections/{id}/sites/{a|b}/connect|disconnect`.
+
 ## Tampilan aplikasi
 
 Tangkapan layar aplikasi nyata; bilah alamat browser tidak disertakan dan nilai subnet akun ditutup dengan label **DISAMARKAN** untuk publikasi. Status dan jumlah sesi tidak diubah. Bukan bukti pengujian koneksi Windows.

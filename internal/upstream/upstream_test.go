@@ -18,6 +18,8 @@ func TestAllowlistMatchesPythonProxy(t *testing.T) {
 		{"POST", "connections"}, {"POST", "users"}, {"POST", "policies"},
 		{"POST", "connections/1/initiate"}, {"POST", "connections/1/terminate"},
 		{"PUT", "users/1"}, {"DELETE", "users/1"}, {"PUT", "connections/2"}, {"DELETE", "policies/3"},
+		{"GET", "connections/7/sites/a/config"}, {"GET", "connections/7/sites/b/config"},
+		{"POST", "connections/7/sites/a/connect"}, {"POST", "connections/7/sites/b/disconnect"},
 	}
 	for _, a := range allowed {
 		if !Allowed(a[0], a[1]) {
@@ -30,6 +32,8 @@ func TestAllowlistMatchesPythonProxy(t *testing.T) {
 		{"GET", "users/1/profile/x"}, {"GET", "users/a?b/profile"}, {"GET", "users/a#b/profile"},
 		{"GET", `users/a\b/profile`}, {"POST", "connections/1/reload"}, {"GET", ""}, {"GET", "/users"},
 		{"OPTIONS", "users"}, {"GET", "users//profile"},
+		{"GET", "connections/7/sites/c/config"}, {"POST", "connections/7/sites/a/config"}, {"GET", "connections/7/sites/a/connect"},
+		{"POST", "connections/7/sites/a/reload"}, {"GET", "connections/7/sites//config"}, {"DELETE", "connections/7/sites/a"},
 	}
 	for _, d := range denied {
 		if Allowed(d[0], d[1]) {

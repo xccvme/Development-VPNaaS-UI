@@ -32,6 +32,7 @@ type fakeAPI struct {
 	bodies    []map[string]any
 	failPaths map[string]int
 	statusRaw string
+	queries   []string
 }
 
 func newFake() *fakeAPI {
@@ -40,7 +41,10 @@ func newFake() *fakeAPI {
 			{"id": 3.0, "username": "poc-client", "enabled": true, "allowed_cidrs": []any{"10.10.7.0/24"}, "traffic_mode": "split", "runtime_status": "Active", "session_count": 1.0, "virtual_ips": []any{"10.250.0.4"}, "sessions": []any{map[string]any{"ike_id": "13", "ike_state": "ESTABLISHED", "remote_address": "10.221.61.250", "virtual_ips": []any{"10.250.0.4"}, "children": []any{map[string]any{"child_id": "7", "state": "INSTALLED", "bytes_in": 5.0, "bytes_out": 6.0}}}}},
 			{"id": 9.0, "username": "<script>alert(1)</script>", "enabled": false, "allowed_cidrs": []any{"10.10.7.0/24"}, "traffic_mode": "split", "runtime_status": "Down", "session_count": 0.0, "virtual_ips": []any{}, "sessions": []any{}},
 		},
-		conns:    []map[string]any{{"id": 4.0, "name": "branch", "remote_address": "203.0.113.5", "remote_id": "203.0.113.5", "local_ts": "10.10.7.0/24", "remote_ts": "192.168.50.0/24", "enabled": true}},
+		conns: []map[string]any{{"id": 4.0, "name": "branch", "remote_address": "203.0.113.5", "remote_id": "203.0.113.5", "local_ts": "10.10.7.0/24", "remote_ts": "192.168.50.0/24", "enabled": true},
+			{"id": 7.0, "name": "kantor", "enabled": true, "topology": "hub",
+				"site_a": map[string]any{"name": "jakarta", "address": "%any", "id": "kantor-a@vpnaas", "psk_set": true, "subnets": "192.168.10.0/24,192.168.11.0/24", "nat": true, "status": "active", "remote_host": "203.0.113.20", "bytes_in": 10.0, "bytes_out": 20.0},
+				"site_b": map[string]any{"name": "surabaya", "address": "203.0.113.30", "id": "kantor-b@vpnaas", "psk_set": true, "subnets": "192.168.20.0/24", "nat": false, "status": "down"}}},
 		policies: []map[string]any{{"id": 5.0, "name": "lan", "source_cidr": "10.250.0.0/24", "destination_cidr": "10.10.7.0/24", "protocol": "tcp", "enabled": true}},
 	}
 }
@@ -91,6 +95,18 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 3 && parts[0] == "users" && parts[2] == "profile":
 		w.Header().Set("Content-Disposition", `attachment; filename="user-`+parts[1]+`.json"`)
 		out(200, map[string]any{"username": "poc-client", "password": "DO-NOT-EXPORT", "traffic_mode": "split", "server": "192.0.2.10", "server_id": "192.0.2.10", "allowed_cidrs": []any{"10.10.7.0/24"}, "ca_certificate": "-----BEGIN CERTIFICATE-----\nY2VydA==\n-----END CERTIFICATE-----\n"})
+	case len(parts) == 5 && parts[0] == "connections" && parts[2] == "sites" && parts[4] == "config":
+		f.queries = append(f.queries, r.URL.RawQuery)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="upstream-name.txt"`)
+		w.WriteHeader(200)
+		w.Write([]byte("# " + r.URL.Query().Get("format") + " site " + parts[3] + "\n"))
+	case len(parts) == 5 && parts[0] == "connections" && parts[2] == "sites":
+		if parts[3] == "a" && parts[4] == "connect" {
+			out(409, map[string]any{"detail": "Site-A di belakang NAT (%any): jalankan connect dari gateway Site-A"})
+			return
+		}
+		out(200, map[string]any{"ok": true, "output": "site " + parts[3] + " " + parts[4] + " <done>"})
 	case len(parts) == 3 && parts[0] == "connections":
 		out(200, map[string]any{"ok": true, "output": "swanctl " + parts[2] + " <done>"})
 	case len(parts) == 1 && r.Method == "GET":
@@ -280,7 +296,7 @@ func TestPagesRenderAndEscape(t *testing.T) {
 	e := setup(t)
 	e.login()
 	checks := map[string][]string{
-		"/ringkasan": {"Ringkasan", "Koneksi S2S", "Akun C2S", "Firewall Rules", "strongSwan swanctl"},
+		"/ringkasan": {"Ringkasan", "VPN Hub", "Akun C2S", "Firewall Rules", "strongSwan swanctl"},
 		"/koneksi":   {"branch", "203.0.113.5", "192.168.50.0/24", "Active", "Connect", "Disconnect"},
 		"/akun":      {"poc-client", "Enabled", "Disabled", "Active", "Down", "10.250.0.4", "Split", "/unduh/akun/3/profil.json", "/unduh/akun/3/windows.ps1", "Setup-Client(windows).ps1"},
 		"/kebijakan": {"lan", "10.250.0.0/24", "TCP"},
@@ -528,7 +544,7 @@ func TestEmptyStates(t *testing.T) {
 	e.api.conns = nil
 	e.api.policies = []map[string]any{}
 	_, body := e.do("GET", "/koneksi", nil, nil)
-	if !strings.Contains(body, "Belum ada koneksi") {
+	if !strings.Contains(body, "Belum ada VPN Hub") {
 		t.Fatal("empty connections")
 	}
 	_, body = e.do("GET", "/kebijakan", nil, nil)

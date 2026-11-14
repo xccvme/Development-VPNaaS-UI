@@ -4,8 +4,21 @@ import "vpnaas/ui-goth/internal/model"
 
 // ---------- shared form pieces ----------
 templ Modal(title string) {
+	@modalBox(title, "max-w-lg") {
+		{ children... }
+	}
+}
+
+// ModalWide is used by the VPN Hub form (two site cards side by side).
+templ ModalWide(title string) {
+	@modalBox(title, "max-w-4xl") {
+		{ children... }
+	}
+}
+
+templ modalBox(title, width string) {
 	<div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#212529]/40 px-4 py-10" data-modal>
-		<div class="w-full max-w-lg rounded-xl bg-white shadow-2xl" role="dialog" aria-modal="true" aria-label={ title }>
+		<div class={ "w-full rounded-xl bg-white shadow-2xl", width } role="dialog" aria-modal="true" aria-label={ title }>
 			<div class="flex items-center justify-between border-b border-[#DEE2E6] px-6 py-4">
 				<h2 class="text-lg font-bold">{ title }</h2>
 				<button type="button" class="rounded-md px-2 text-2xl leading-none text-[#6C757D] hover:bg-[#F1F3F5]" data-modal-close aria-label="Tutup">×</button>
@@ -62,6 +75,7 @@ templ cidrList(label, name, value, placeholder, errMsg, hint string, required bo
 			placeholder={ placeholder }
 			spellcheck="false"
 			autocomplete="off"
+			data-cidr-list
 			if required {
 				required
 			}
@@ -149,21 +163,35 @@ templ emptyOrNoMatch(total int, hasErr bool, title, detail string) {
 	}
 }
 
-// ---------- Koneksi S2S ----------
+// ---------- VPN Hub (/koneksi) ----------
 templ ConnectionsPage(t ConnTable) {
-	@PageHeader("Koneksi Site-to-Site", "Konfigurasi dan operasikan tunnel IPsec IKEv2 antar jaringan.", PrimaryButton("Buat Koneksi", "/koneksi/baru"))
+	@PageHeader("VPN Hub", "Hubungkan LAN antar site lewat server ini sebagai hub: Site-A ⇄ Hub ⇄ Site-B. Client di Site-A bisa ping/akses Site-B dan sebaliknya.", PrimaryButton("Buat VPN Hub", "/koneksi/baru"))
 	@VPNTabs("koneksi")
+	@hubDiagram()
 	@s2sRoutingInfo()
 	@ConnectionsTable(t)
 }
 
+// hubDiagram is a compact flex sketch of the hub-and-spoke topology.
+templ hubDiagram() {
+	<div class="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-[#DEE2E6] bg-white px-4 py-3 text-sm" data-hub-diagram aria-label="Topologi: Site-A ke Hub, Site-B ke Hub">
+		<span class="rounded-md border border-[#CED4DA] bg-[#F8F9FA] px-3 py-1 font-semibold">Site-A <span class="font-normal text-[#6C757D]">(LAN)</span></span>
+		<span class="font-mono text-[#6C757D]" aria-hidden="true">──IPsec──▶</span>
+		<span class="rounded-md bg-[#2F6BC4] px-3 py-1 font-semibold text-white">Hub <span class="font-normal text-white/80">(server ini)</span></span>
+		<span class="font-mono text-[#6C757D]" aria-hidden="true">◀──IPsec──</span>
+		<span class="rounded-md border border-[#CED4DA] bg-[#F8F9FA] px-3 py-1 font-semibold">Site-B <span class="font-normal text-[#6C757D]">(LAN)</span></span>
+		<span class="basis-full text-xs text-[#6C757D] sm:basis-auto sm:pl-2">Tiap site cukup konek ke hub; trafik Site-A ⇄ Site-B diteruskan oleh hub.</span>
+	</div>
+}
+
 templ s2sRoutingInfo() {
 	<details class="mb-4 rounded-lg border border-[#DEE2E6] bg-[#F8F9FA] px-4 py-2 text-sm text-[#495057]" data-s2s-info>
-		<summary class="cursor-pointer select-none font-semibold text-[#2F6BC4]">Tunnel Up tapi host LAN tidak bisa saling ping?</summary>
+		<summary class="cursor-pointer select-none font-semibold text-[#2F6BC4]">Site Active tapi host LAN tidak bisa saling ping?</summary>
 		<ul class="mt-2 list-disc space-y-1 pl-5">
-			<li>Host/router di LAN lokal harus punya route ke subnet remote via LAN IP server VPN ini (atau jadikan server VPN default gateway). Hal yang sama berlaku di site lawan.</li>
-			<li>OpenStack: tambahkan subnet remote ke allowed-address-pairs port LAN server VPN, atau nonaktifkan port security di port tersebut; jika tidak, paket di-drop oleh anti-spoofing.</li>
-			<li>Traffic antar subnet hanya lewat jika diizinkan di menu Firewall Rules.</li>
+			<li>Gateway tiap site harus mengaktifkan IP forwarding dan menjadi jalur LAN ke subnet site lawan: host/router LAN butuh route ke subnet site lawan via LAN IP gateway site (atau jadikan gateway tersebut default gateway).</li>
+			<li>Opsi NAT/masquerade di tiap site membuat host LAN tidak perlu route balik; matikan jika router LAN sudah punya route ke site lawan dan Anda ingin melihat IP asli.</li>
+			<li>OpenStack: tambahkan subnet site lawan ke allowed-address-pairs port LAN gateway, atau nonaktifkan port security di port tersebut; jika tidak, paket di-drop oleh anti-spoofing.</li>
+			<li>Koneksi Direct (lama) tetap memakai aturan menu Firewall Rules.</li>
 		</ul>
 		<p class="mt-2 text-xs text-[#6C757D]">Detail: dokumentasi/jaringan.md (backend).</p>
 	</details>
@@ -171,62 +199,250 @@ templ s2sRoutingInfo() {
 
 templ ConnectionsTable(t ConnTable) {
 	<section id="conn-table" class="rounded-xl border border-[#DEE2E6]" hx-get="/koneksi/tabel" hx-trigger="every 30s, vpnaas:changed from:body" hx-swap="outerHTML" hx-include="this" hx-disinherit="*">
-		@tableHead(len(t.Rows), t.Total, "/koneksi/tabel", "#conn-table", t.Query, "Cari koneksi…")
+		@tableHead(len(t.Rows), t.Total, "/koneksi/tabel", "#conn-table", t.Query, "Cari VPN Hub / site / subnet…")
 		<div class="px-5 pt-4 empty:hidden">
 			@FlashBox(t.Flash)
 			@ErrorBox(t.Err)
-			if t.StatusErr != "" {
-				@ErrorBox("Status runtime tidak tersedia (ditampilkan Unknown): " + t.StatusErr)
+			if t.StatusErr != "" && len(t.DirectRows()) > 0 {
+				@ErrorBox("Status runtime koneksi Direct (lama) tidak tersedia (ditampilkan Unknown): " + t.StatusErr)
 			}
 		</div>
 		if len(t.Rows) == 0 {
-			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada koneksi", "Buat koneksi pertama untuk menghubungkan jaringan privat Anda.")
+			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada VPN Hub", "Klik Buat VPN Hub untuk menghubungkan LAN Site-A dan Site-B lewat server ini.")
 		} else {
-			<div class="overflow-x-auto pb-1" tabindex="0" aria-label="Tabel dapat digeser horizontal">
-				<table class="min-w-full text-sm">
-					<thead class="bg-[#E9ECEF]">
-						<tr>
-							@th("Nama Koneksi")
-							@th("Alamat Remote")
-							@th("Remote ID")
-							@th("Subnet (lokal ↔ remote)")
-							@th("Admin")
-							@th("Runtime")
-							@th("Aksi")
-						</tr>
-					</thead>
-					<tbody>
-						for _, c := range t.Rows {
-							<tr class="border-t border-[#DEE2E6] hover:bg-[#F8F9FA]">
-								<td class="whitespace-nowrap px-3 py-3">
-									<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
-										@Dot(c.Runtime)
-										{ c.Name }
-									</span>
-								</td>
-								<td class="px-3 py-3 font-mono">{ c.RemoteAddress }</td>
-								<td class="px-3 py-3 font-mono">{ c.RemoteID }</td>
-								@subnetCell(c.LocalList(), c.RemoteList())
-								<td class="px-3 py-3">
-									@Badge(c.AdminLabel())
-								</td>
-								<td class="px-3 py-3">
-									@Badge(c.Runtime)
-								</td>
-								<td class="px-3 py-3">
-									@connectionActions(c)
-								</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
+			if len(t.HubRows()) > 0 {
+				@hubTable(t.HubRows())
+			}
+			if len(t.DirectRows()) > 0 {
+				@directTable(t.DirectRows())
+			}
 		}
 	</section>
 }
 
+templ hubTable(rows []ConnRow) {
+	<div class="overflow-x-auto pb-1" tabindex="0" aria-label="Tabel dapat digeser horizontal">
+		<table class="min-w-full text-sm" data-hub-table>
+			<thead class="bg-[#E9ECEF]">
+				<tr>
+					@th("Nama")
+					@th("Site-A")
+					@th("Site-B")
+					@th("Aksi")
+				</tr>
+			</thead>
+			<tbody>
+				for _, c := range rows {
+					<tr class="border-t border-[#DEE2E6] align-top hover:bg-[#F8F9FA]">
+						<td class="whitespace-nowrap px-3 py-3">
+							<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
+								@Dot(c.Runtime)
+								{ c.Name }
+							</span>
+							<span class="mt-1 flex items-center gap-1 text-xs text-[#6C757D]">
+								ID { itoa(c.ID) }
+								@Badge(c.AdminLabel())
+							</span>
+						</td>
+						@siteCell(c.A())
+						@siteCell(c.B())
+						<td class="px-3 py-3">
+							@hubActions(c)
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+templ siteCell(s model.Site) {
+	<td class="px-3 py-3" data-site>
+		<div class="min-w-[200px] max-w-[320px] space-y-1">
+			<div class="flex items-center gap-2">
+				<span class="font-semibold">{ s.Name }</span>
+				@Badge(s.StatusLabel())
+			</div>
+			<div class="flex flex-wrap gap-x-2 font-mono text-xs">
+				for _, n := range s.SubnetList() {
+					<span>{ n }</span>
+				}
+			</div>
+			<div class="text-xs text-[#6C757D]">
+				if s.RemoteHost != "" {
+					Remote host: <span class="font-mono">{ s.RemoteHost }</span>
+				} else if s.BehindNAT() {
+					Alamat: <span class="font-mono">%any</span> (di belakang NAT)
+				} else {
+					Alamat: <span class="font-mono">{ s.Address }</span>
+				}
+				· NAT { ternary(s.NATOn(), "on", "off") }
+			</div>
+			if s.BytesIn != nil || s.BytesOut != nil {
+				<div class="font-mono text-xs text-[#6C757D]">in { model.Bytes(s.BytesIn) } · out { model.Bytes(s.BytesOut) }</div>
+			}
+		</div>
+	</td>
+}
+
+templ directTable(rows []ConnRow) {
+	<section class="border-t border-[#DEE2E6]" data-direct-legacy>
+		<div class="flex items-center gap-2 px-5 pt-4 text-sm font-semibold text-[#495057]">
+			@Badge("Direct (lama)")
+			<span>Koneksi S2S langsung (format lama) — tetap berjalan seperti sebelumnya.</span>
+		</div>
+		<div class="overflow-x-auto pb-1" tabindex="0" aria-label="Tabel dapat digeser horizontal">
+			<table class="mt-2 min-w-full text-sm">
+				<thead class="bg-[#E9ECEF]">
+					<tr>
+						@th("Nama Koneksi")
+						@th("Alamat Remote")
+						@th("Remote ID")
+						@th("Subnet (lokal ↔ remote)")
+						@th("Admin")
+						@th("Runtime")
+						@th("Aksi")
+					</tr>
+				</thead>
+				<tbody>
+					for _, c := range rows {
+						<tr class="border-t border-[#DEE2E6] hover:bg-[#F8F9FA]">
+							<td class="whitespace-nowrap px-3 py-3">
+								<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
+									@Dot(c.Runtime)
+									{ c.Name }
+								</span>
+								@Badge(c.TopologyLabel())
+							</td>
+							<td class="px-3 py-3 font-mono">{ c.RemoteAddress }</td>
+							<td class="px-3 py-3 font-mono">{ c.RemoteID }</td>
+							@subnetCell(c.LocalList(), c.RemoteList())
+							<td class="px-3 py-3">
+								@Badge(c.AdminLabel())
+							</td>
+							<td class="px-3 py-3">
+								@Badge(c.Runtime)
+							</td>
+							<td class="px-3 py-3">
+								@connectionActions(c)
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</section>
+}
+
+templ textInput(label, name, value, placeholder, errMsg, hint string, required bool) {
+	<label class="block text-sm font-semibold text-[#212529]">
+		{ label }
+		<input
+			type="text"
+			name={ name }
+			value={ value }
+			placeholder={ placeholder }
+			autocomplete="off"
+			spellcheck="false"
+			if required {
+				required
+			}
+			class={ inputClass(errMsg) }
+		/>
+		if hint != "" {
+			<span class="mt-1 block text-xs font-normal text-[#6C757D]">{ hint }</span>
+		}
+		if errMsg != "" {
+			<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ errMsg }</span>
+		}
+	</label>
+}
+
+templ HubForm(f Form) {
+	@ModalWide(ternary(f.Edit(), "Ubah VPN Hub", "Buat VPN Hub")) {
+		<form
+			if f.Edit() {
+				hx-put={ idURL("/koneksi", f.ID, "") }
+			} else {
+				hx-post="/koneksi"
+			}
+			hx-target="#modal"
+			class="space-y-4"
+		>
+			@ErrorBox(f.Err)
+			<input type="hidden" name="topology" value="hub"/>
+			@textInput("Nama VPN Hub", "name", f.V("name"), "mis. kantor-cabang", f.E("name"), "Huruf, angka, _ @ . : - (dipakai di nama file script).", true)
+			<p class="rounded-md bg-[#E8EEF9] px-3 py-2 text-xs text-[#2C3E87]">Site-A dan Site-B masing-masing konek ke server ini (hub). Isi subnet LAN di belakang tiap site; hub meneruskan trafik antar keduanya.</p>
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+				@siteCard(f, "a")
+				@siteCard(f, "b")
+			</div>
+			@enabledBox(f.Enabled)
+			if !f.Edit() {
+				<p class="text-xs text-[#6C757D]">Perlu tunnel langsung server ini ↔ satu peer (format lama)? <button type="button" class="font-semibold text-[#1A73E8] underline" hx-get="/koneksi/baru?topology=direct" hx-target="#modal">Koneksi Direct (lama)</button></p>
+			}
+			@formFooter(ternary(f.Edit(), "Simpan", "Buat"))
+		</form>
+	}
+}
+
+templ siteCard(f Form, key string) {
+	<fieldset class="space-y-3 rounded-lg border border-[#DEE2E6] p-4" data-site-card={ key }>
+		<legend class="px-1 text-base font-bold text-[#2F6BC4]">{ siteLabel(key) }</legend>
+		@textInput("Nama site", "site_"+key+"_name", f.V("site_"+key+"_name"), ternary(key == "a", "mis. jakarta", "mis. surabaya"), f.E("site_"+key+"_name"), "", true)
+		@textInput("Alamat publik", "site_"+key+"_address", f.V("site_"+key+"_address"), "IP publik/hostname, kosongkan jika di belakang NAT", f.E("site_"+key+"_address"), "Kosong = %any (site yang memulai koneksi ke hub).", false)
+		@textInput("IKE ID (opsional)", "site_"+key+"_id", f.V("site_"+key+"_id"), "otomatis (<nama>-"+key+"@vpnaas)", f.E("site_"+key+"_id"), "", false)
+		@field("PSK (opsional)", "site_"+key+"_psk", "", "password", f.E("site_"+key+"_psk"), ternary(f.Edit(), "kosongkan = tidak diubah", "kosongkan = generate otomatis"), false)
+		@cidrList("Subnet LAN", "site_"+key+"_subnets", f.V("site_"+key+"_subnets"), ternary(key == "a", "192.168.10.0/24", "192.168.20.0/24"), f.E("site_"+key+"_subnets"), "LAN di belakang site ini yang boleh diakses site lawan. Satu CIDR per baris atau koma (maks. 8).", true)
+		<div>
+			<input type="hidden" name={ "site_" + key + "_nat" } value="0"/>
+			<label class="flex items-center gap-2 text-sm font-semibold">
+				<input type="checkbox" name={ "site_" + key + "_nat" } value="on" checked?={ f.V("site_"+key+"_nat") == "on" } class="h-4 w-4 accent-[#2F6BC4]"/>
+				NAT / masquerade
+			</label>
+			<span class="mt-1 block pl-6 text-xs text-[#6C757D]">Aktifkan jika router LAN tidak punya route balik ke site lawan</span>
+		</div>
+	</fieldset>
+}
+
+templ HubConfigure(h HubSite) {
+	@Modal("Configure " + h.Label()) {
+		@ErrorBox(h.Err)
+		if h.Err == "" {
+			<p class="text-sm text-[#495057]">
+				VPN Hub <span class="font-mono font-semibold">{ h.Name }</span> · { h.Label() } <span class="font-semibold">{ h.Site.Name }</span> · status
+				@Badge(h.Site.StatusLabel())
+			</p>
+			<ol class="mt-4 list-decimal space-y-3 pl-5 text-sm text-[#212529]">
+				<li>
+					Download Setup script:
+					<a href={ templ.URL(h.ScriptURL()) } download class="font-semibold text-[#1A73E8] underline">{ h.ScriptFile() }</a>
+					<span class="block text-xs text-[#6C757D]">Script berisi PSK site ini; simpan dengan aman. Alternatif manual: <a href={ templ.URL(h.ConfURL()) } download class="text-[#1A73E8] underline">{ h.ConfFile() }</a> (swanctl.conf).</span>
+				</li>
+				<li>Copy ke gateway { h.Label() } (Linux, mis. router/VM di LAN site tersebut): <code class="block rounded bg-[#F8F9FA] px-2 py-1 font-mono text-xs">{ "scp " + h.ScriptFile() + " root@<gateway-" + h.Label() + ">:" }</code></li>
+				<li>Jalankan di gateway: <code class="block rounded bg-[#F8F9FA] px-2 py-1 font-mono text-xs">{ "sudo bash " + h.ScriptFile() }</code></li>
+				<li>Tunggu status { h.Label() } di tabel menjadi <span class="font-semibold">Active</span> (tabel refresh tiap 30 detik, atau klik Muat ulang).</li>
+			</ol>
+			<div class="mt-4 space-y-1 rounded-md bg-[#FFF4E5] px-3 py-2 text-xs text-[#5C3B00]">
+				<p>Gateway { h.Label() } harus mengaktifkan IP forwarding (net.ipv4.ip_forward=1) dan berada di jalur LAN: host LAN perlu route ke subnet { h.Peer() } via LAN IP gateway ini (atau gateway ini jadi default gateway).</p>
+				<p>NAT/masquerade untuk { h.Label() }: <span class="font-semibold">{ ternary(h.Site.NATOn(), "aktif", "nonaktif") }</span>. Aktifkan (menu Ubah) jika router LAN tidak punya route balik ke { h.Peer() }.</p>
+				if h.Site.BehindNAT() {
+					<p>Alamat site = %any (di belakang NAT): koneksi dimulai dari gateway site, jadi Connect dari hub tidak tersedia untuk site ini.</p>
+				}
+			</div>
+		}
+		<div class="mt-5 flex justify-end border-t border-[#DEE2E6] pt-4">
+			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Tutup</button>
+		</div>
+	}
+}
+
 templ ConnectionForm(f Form) {
-	@Modal(ternary(f.Edit(), "Ubah Koneksi", "Buat Koneksi")) {
+	@Modal(ternary(f.Edit(), "Ubah Koneksi", "Koneksi Direct (lama)")) {
+		<p class="mb-3 flex items-center gap-2">
+			@Badge("Direct (lama)")
+			<span class="text-xs text-[#6C757D]">Koneksi S2S langsung server ini ↔ satu peer (format lama).</span>
+		</p>
 		<form
 			if f.Edit() {
 				hx-put={ idURL("/koneksi", f.ID, "") }
@@ -431,6 +647,26 @@ templ accountActions(u model.User) {
 		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/windows.ps1")) } download>Setup-Client(windows).ps1</a>
 		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/vpnaas-ca.crt")) } download>Download Sertifikat (.crt)</a>
 		<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/akun", u.ID, "/hapus") } hx-target="#modal">Hapus</button>
+	}
+}
+
+// hubActions: hub rows reuse the click-only action menu; per-site connect,
+// disconnect (with confirm) and configure/download items.
+templ hubActions(c ConnRow) {
+	@rowActions("connection-menu-"+itoa(c.ID), c.Name) {
+		<button type="button" role="menuitem" hx-get={ idURL("/koneksi", c.ID, "/ubah") } hx-target="#modal">Ubah</button>
+		for _, k := range []string{"a", "b"} {
+			<hr role="separator"/>
+			<button type="button" role="menuitem" hx-get={ siteURL(c.ID, k, "configure") } hx-target="#modal" title="Langkah setup gateway site">{ "Configure " + siteLabel(k) }</button>
+			<a role="menuitem" href={ templ.URL(siteDownload(c.ID, k, "setup.sh")) } download title="Berisi PSK; simpan dengan aman">{ "Download script " + siteLabel(k) + " (.sh)" }</a>
+			<a role="menuitem" href={ templ.URL(siteDownload(c.ID, k, "hub.conf")) } download title="Berisi PSK; simpan dengan aman">{ "Download config " + siteLabel(k) + " (.conf)" }</a>
+		}
+		<hr role="separator"/>
+		for _, k := range []string{"a", "b"} {
+			<button type="button" role="menuitem" hx-post={ siteURL(c.ID, k, "connect") } hx-target="#conn-table" hx-swap="outerHTML" title="Mulai tunnel hub ke site ini">{ "Connect " + siteLabel(k) }</button>
+			<button type="button" role="menuitem" hx-get={ siteURL(c.ID, k, "disconnect") } hx-target="#modal" title="Putus tunnel site ini; bisa connect ulang">{ "Disconnect " + siteLabel(k) }</button>
+		}
+		<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/koneksi", c.ID, "/hapus") } hx-target="#modal">Hapus</button>
 	}
 }
 

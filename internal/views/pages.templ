@@ -48,9 +48,9 @@ templ OverviewPage(o Overview) {
 			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/akun" class="font-semibold text-[#1A73E8]">Kelola akun →</a></div>
 		</section>
 		<section class="flex flex-col rounded-xl border border-[#DEE2E6]">
-			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Koneksi S2S</h2>
+			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">VPN Hub</h2>
 			if len(o.Connections) == 0 {
-				@Empty("Belum ada koneksi", "Buat tunnel site-to-site untuk menghubungkan jaringan privat.")
+				@Empty("Belum ada VPN Hub", "Buat VPN Hub untuk menghubungkan LAN Site-A dan Site-B lewat server ini.")
 			} else {
 				<ul class="divide-y divide-[#DEE2E6]">
 					for _, c := range o.Connections {
@@ -59,15 +59,23 @@ templ OverviewPage(o Overview) {
 								@Dot(c.Runtime)
 								{ c.Name }
 							</span>
-							<span class="flex gap-2">
+							<span class="flex flex-wrap gap-2">
 								@Badge(c.AdminLabel())
-								@Badge(c.Runtime)
+								if c.IsHub() {
+									<span class="text-xs text-[#6C757D]">A</span>
+									@Badge(c.A().StatusLabel())
+									<span class="text-xs text-[#6C757D]">B</span>
+									@Badge(c.B().StatusLabel())
+								} else {
+									@Badge("Direct (lama)")
+									@Badge(c.Runtime)
+								}
 							</span>
 						</li>
 					}
 				</ul>
 			}
-			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/koneksi" class="font-semibold text-[#1A73E8]">Kelola koneksi →</a></div>
+			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/koneksi" class="font-semibold text-[#1A73E8]">Kelola VPN Hub →</a></div>
 		</section>
 	</div>
 	<section class="mt-6 rounded-xl border border-[#DEE2E6]">

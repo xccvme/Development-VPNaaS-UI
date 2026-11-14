@@ -182,3 +182,73 @@ func TestConnectionMultiCIDR(t *testing.T) {
 		t.Errorf("invalid item must be named: %v", errs)
 	}
 }
+
+func hubVals(kv ...string) url.Values {
+	v := vals("name", "branches", "topology", "hub", "enabled", "on",
+		"site_a_name", "jkt", "site_a_address", "", "site_a_id", "", "site_a_psk", "", "site_a_subnets", "192.168.10.0/24\n192.168.11.0/24", "site_a_nat", "0", "site_a_nat", "on",
+		"site_b_name", "sby", "site_b_address", "203.0.113.30", "site_b_id", "sby@example", "site_b_psk", "Secret-psk-1", "site_b_subnets", "192.168.20.0/24", "site_b_nat", "0")
+	for i := 0; i < len(kv); i += 2 {
+		v.Set(kv[i], kv[i+1])
+	}
+	return v
+}
+
+func TestHubCreateBody(t *testing.T) {
+	body, errs := Hub(hubVals(), true)
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	want := map[string]any{"name": "branches", "enabled": true, "topology": "hub",
+		"site_a": map[string]any{"name": "jkt", "address": "%any", "subnets": "192.168.10.0/24,192.168.11.0/24", "nat": true},
+		"site_b": map[string]any{"name": "sby", "address": "203.0.113.30", "id": "sby@example", "psk": "Secret-psk-1", "subnets": "192.168.20.0/24", "nat": false},
+	}
+	if !reflect.DeepEqual(body, want) {
+		t.Fatalf("got %#v", body)
+	}
+	// NAT absent entirely (no hidden marker) defaults to true
+	v := hubVals()
+	v.Del("site_b_nat")
+	body, _ = Hub(v, true)
+	if body["site_b"].(map[string]any)["nat"] != true {
+		t.Error("nat default true")
+	}
+	// hostname and explicit %any accepted
+	for _, addr := range []string{"gw.example.com", "%any", "198.51.100.4"} {
+		if _, errs := Hub(hubVals("site_a_address", addr), true); errs["site_a_address"] != "" {
+			t.Errorf("%s rejected: %v", addr, errs)
+		}
+	}
+}
+
+func TestHubValidationPerField(t *testing.T) {
+	cases := []struct{ key, val, field, msg string }{
+		{"name", "bad name", "name", "Nama"},
+		{"site_a_name", "", "site_a_name", "Nama site"},
+		{"site_b_address", "bad addr!", "site_b_address", "Alamat"},
+		{"site_a_id", "bad id", "site_a_id", "IKE ID"},
+		{"site_a_psk", "short", "site_a_psk", "PSK"},
+		{"site_a_subnets", "", "site_a_subnets", "wajib"},
+		{"site_b_subnets", "10.0.0.0/33", "site_b_subnets", "CIDR IPv4 tidak valid"},
+		{"site_b_subnets", "0.0.0.0/0", "site_b_subnets", "/0"},
+		{"site_b_subnets", "10.0.1.0/24,10.0.2.0/24,10.0.3.0/24,10.0.4.0/24,10.0.5.0/24,10.0.6.0/24,10.0.7.0/24,10.0.8.0/24,10.0.9.0/24", "site_b_subnets", "Maksimal 8"},
+		{"site_b_subnets", "192.168.10.128/25", "site_b_subnets", "tumpang tindih"},
+	}
+	for _, c := range cases {
+		_, errs := Hub(hubVals(c.key, c.val), true)
+		if !strings.Contains(errs[c.field], c.msg) {
+			t.Errorf("%s=%q: want %s error containing %q, got %v", c.key, c.val, c.field, c.msg, errs)
+		}
+	}
+}
+
+func TestHubEditKeepsPSK(t *testing.T) {
+	body, errs := Hub(hubVals("site_b_psk", ""), false)
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	for _, s := range []string{"site_a", "site_b"} {
+		if _, ok := body[s].(map[string]any)["psk"]; ok {
+			t.Errorf("%s: blank psk must be omitted on edit", s)
+		}
+	}
+}

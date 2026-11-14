@@ -860,8 +860,14 @@ func (s *Server) downloadProfile(w http.ResponseWriter, r *http.Request, _ auth.
 		jsonError(w, http.StatusBadGateway, "Profil VPN dari backend tidak valid")
 		return
 	}
+	username, _ := check["username"].(string)
+	name, err := winsetup.Filename(username)
+	if err != nil {
+		jsonError(w, 502, "Username profil tidak valid")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", `attachment; filename="user-`+r.PathValue("id")+`.json"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="Profil-VPN-`+name+`.json"`)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Write(res.Body)
 }
@@ -923,7 +929,7 @@ func (s *Server) downloadWindows(w http.ResponseWriter, r *http.Request, _ auth.
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`.ps1"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="Setup-Client-`+name+`.ps1"`)
 	w.Header().Set("Cache-Control", "no-store")
 	io.WriteString(w, script)
 }

@@ -282,7 +282,7 @@ func TestPagesRenderAndEscape(t *testing.T) {
 	checks := map[string][]string{
 		"/ringkasan": {"Ringkasan", "Koneksi S2S", "Akun C2S", "Kebijakan", "strongSwan swanctl"},
 		"/koneksi":   {"branch", "203.0.113.5", "192.168.50.0/24", "Active", "Initiate", "Terminate"},
-		"/akun":      {"poc-client", "Enabled", "Disabled", "Active", "Down", "10.250.0.4", "Split", "/unduh/akun/3/profil.json", "/unduh/akun/3/windows.ps1"},
+		"/akun":      {"poc-client", "Enabled", "Disabled", "Active", "Down", "10.250.0.4", "Split", "/unduh/akun/3/profil.json", "/unduh/akun/3/windows.ps1", "Setup-Client(windows).ps1"},
 		"/kebijakan": {"lan", "10.250.0.0/24", "TCP"},
 		"/status":    {"ESTABLISHED", "strongSwan swanctl", "pool-3"},
 		"/audit":     {"2026-11-13 20:15:11", "delete", "resource_id"},
@@ -471,12 +471,12 @@ func TestDownloads(t *testing.T) {
 	e := setup(t)
 	e.login()
 	res, body := e.do("GET", "/unduh/akun/3/profil.json", nil, nil)
-	if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "no-store" || !strings.Contains(res.Header.Get("Content-Disposition"), "attachment") || !strings.Contains(body, "poc-client") {
+	if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("Content-Disposition") != `attachment; filename="Profil-VPN-poc-client.json"` || !strings.Contains(body, "poc-client") {
 		t.Fatalf("profile: %d %v", res.StatusCode, res.Header)
 	}
 	for _, p := range []string{"/unduh/akun/3/windows.ps1", "/downloads/users/3/windows.ps1"} {
 		res, body = e.do("GET", p, nil, nil)
-		if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("Content-Disposition") != `attachment; filename="poc-client.ps1"` {
+		if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("Content-Disposition") != `attachment; filename="Setup-Client-poc-client.ps1"` {
 			t.Fatalf("%s: %d %v", p, res.StatusCode, res.Header)
 		}
 		if strings.Contains(body, "DO-NOT-EXPORT") || strings.Contains(body, apiKey) || !strings.Contains(body, "-SplitTunneling $true") || !strings.Contains(body, "'10.10.7.0/24'") {

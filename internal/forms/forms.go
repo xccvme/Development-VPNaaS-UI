@@ -139,19 +139,21 @@ func Connection(v url.Values, create bool) (map[string]any, Errors) {
 		}
 		body["remote_id"] = rid
 	}
-	local := get(v, "local_ts")
-	if local == "" {
-		local = DefaultLAN
+	// Blank local subnets are omitted: the backend applies its LAN default
+	// on create and keeps the stored value on edit.
+	if local := SplitList(v.Get("local_ts")); len(local) > 0 {
+		if msg := selectorError(local); msg != "" {
+			errs["local_ts"] = msg
+		}
+		body["local_ts"] = strings.Join(local, ",")
 	}
-	if !ipv4CIDR(local) {
-		errs["local_ts"] = "CIDR IPv4 tidak valid"
+	remote := SplitList(v.Get("remote_ts"))
+	if len(remote) == 0 {
+		errs["remote_ts"] = "Subnet LAN remote wajib diisi"
+	} else if msg := selectorError(remote); msg != "" {
+		errs["remote_ts"] = msg
 	}
-	body["local_ts"] = local
-	remote := get(v, "remote_ts")
-	if !ipv4CIDR(remote) {
-		errs["remote_ts"] = "CIDR IPv4 tidak valid"
-	}
-	body["remote_ts"] = remote
+	body["remote_ts"] = strings.Join(remote, ",")
 	psk := v.Get("psk")
 	if psk != "" {
 		if !credentialRe.MatchString(psk) {
@@ -162,6 +164,24 @@ func Connection(v url.Values, create bool) (map[string]any, Errors) {
 		errs["psk"] = "PSK wajib diisi saat membuat koneksi"
 	}
 	return body, errs
+}
+
+// MaxSelectors is the per-side S2S subnet limit accepted by the backend.
+const MaxSelectors = 8
+
+func selectorError(cidrs []string) string {
+	if len(cidrs) > MaxSelectors {
+		return "Maksimal 8 subnet"
+	}
+	for _, c := range cidrs {
+		if !ipv4CIDR(c) {
+			return "CIDR IPv4 tidak valid: " + c
+		}
+		if p, err := netip.ParsePrefix(c); err == nil && p.Bits() == 0 {
+			return "Default route (/0) tidak didukung: " + c
+		}
+	}
+	return ""
 }
 
 func Policy(v url.Values) (map[string]any, Errors) {

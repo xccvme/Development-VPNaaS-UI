@@ -51,6 +51,49 @@ templ field(label, name, value, typ, errMsg, hint string, required bool) {
 	</label>
 }
 
+// cidrList is a textarea for one-or-more CIDRs (one per line or comma
+// separated); the form layer joins them with commas for the backend.
+templ cidrList(label, name, value, placeholder, errMsg, hint string, required bool) {
+	<label class="block text-sm font-semibold text-[#212529]">
+		{ label }
+		<textarea
+			name={ name }
+			rows="2"
+			placeholder={ placeholder }
+			spellcheck="false"
+			autocomplete="off"
+			if required {
+				required
+			}
+			class={ inputClass(errMsg) + " font-mono text-sm" }
+		>{ value }</textarea>
+		if hint != "" {
+			<span class="mt-1 block text-xs font-normal text-[#6C757D]">{ hint }</span>
+		}
+		if errMsg != "" {
+			<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ errMsg }</span>
+		}
+	</label>
+}
+
+templ subnetCell(local, remote []string) {
+	<td class="px-3 py-3 font-mono text-xs" data-subnets>
+		<div class="flex min-w-[220px] max-w-[360px] items-start gap-2">
+			<div class="flex flex-wrap gap-x-2">
+				for _, l := range local {
+					<span>{ l }</span>
+				}
+			</div>
+			<span class="text-[#6C757D]" aria-label="ke">↔</span>
+			<div class="flex flex-wrap gap-x-2">
+				for _, r := range remote {
+					<span>{ r }</span>
+				}
+			</div>
+		</div>
+	</td>
+}
+
 func inputClass(err string) string {
 	if err != "" {
 		return "mt-1 w-full rounded-md border border-[#DC3545] px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-[#DC3545]/20"
@@ -79,7 +122,7 @@ templ ConfirmModal(c Confirm) {
 		<p class="mt-2 rounded-md bg-[#F8F9FA] px-3 py-2 font-mono text-sm">{ c.Name }</p>
 		<div class="mt-5 flex justify-end gap-2">
 			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Batal</button>
-			if c.Button == "Terminate" {
+			if c.Button == "Disconnect" {
 				<button type="button" hx-post={ c.URL } hx-target="#conn-table" hx-swap="outerHTML" class="rounded-full bg-[#DC3545] px-5 py-2 text-sm font-semibold text-white hover:bg-[#B02A37]">{ c.Button }</button>
 			} else {
 				<button type="button" hx-delete={ c.URL } hx-target="#modal" class="rounded-full bg-[#DC3545] px-5 py-2 text-sm font-semibold text-white hover:bg-[#B02A37]">{ c.Button }</button>
@@ -110,7 +153,20 @@ templ emptyOrNoMatch(total int, hasErr bool, title, detail string) {
 templ ConnectionsPage(t ConnTable) {
 	@PageHeader("Koneksi Site-to-Site", "Konfigurasi dan operasikan tunnel IPsec IKEv2 antar jaringan.", PrimaryButton("Buat Koneksi", "/koneksi/baru"))
 	@VPNTabs("koneksi")
+	@s2sRoutingInfo()
 	@ConnectionsTable(t)
+}
+
+templ s2sRoutingInfo() {
+	<details class="mb-4 rounded-lg border border-[#DEE2E6] bg-[#F8F9FA] px-4 py-2 text-sm text-[#495057]" data-s2s-info>
+		<summary class="cursor-pointer select-none font-semibold text-[#2F6BC4]">Tunnel Up tapi host LAN tidak bisa saling ping?</summary>
+		<ul class="mt-2 list-disc space-y-1 pl-5">
+			<li>Host/router di LAN lokal harus punya route ke subnet remote via LAN IP server VPN ini (atau jadikan server VPN default gateway). Hal yang sama berlaku di site lawan.</li>
+			<li>OpenStack: tambahkan subnet remote ke allowed-address-pairs port LAN server VPN, atau nonaktifkan port security di port tersebut; jika tidak, paket di-drop oleh anti-spoofing.</li>
+			<li>Traffic antar subnet hanya lewat jika diizinkan di menu Firewall Rules.</li>
+		</ul>
+		<p class="mt-2 text-xs text-[#6C757D]">Detail: dokumentasi/jaringan.md (backend).</p>
+	</details>
 }
 
 templ ConnectionsTable(t ConnTable) {
@@ -133,8 +189,7 @@ templ ConnectionsTable(t ConnTable) {
 							@th("Nama Koneksi")
 							@th("Alamat Remote")
 							@th("Remote ID")
-							@th("Subnet Lokal")
-							@th("Subnet Remote")
+							@th("Subnet (lokal ↔ remote)")
 							@th("Admin")
 							@th("Runtime")
 							@th("Aksi")
@@ -151,8 +206,7 @@ templ ConnectionsTable(t ConnTable) {
 								</td>
 								<td class="px-3 py-3 font-mono">{ c.RemoteAddress }</td>
 								<td class="px-3 py-3 font-mono">{ c.RemoteID }</td>
-								<td class="px-3 py-3 font-mono">{ c.LocalTS }</td>
-								<td class="px-3 py-3 font-mono">{ c.RemoteTS }</td>
+								@subnetCell(c.LocalList(), c.RemoteList())
 								<td class="px-3 py-3">
 									@Badge(c.AdminLabel())
 								</td>
@@ -185,10 +239,11 @@ templ ConnectionForm(f Form) {
 			@ErrorBox(f.Err)
 			@field("Nama koneksi", "name", f.V("name"), "text", f.E("name"), "", true)
 			@field("Alamat remote (IPv4)", "remote_address", f.V("remote_address"), "text", f.E("remote_address"), "", true)
-			@field("Remote ID (opsional)", "remote_id", f.V("remote_id"), "text", f.E("remote_id"), "Kosong = sama dengan alamat remote.", false)
-			@field("Traffic selector lokal (CIDR)", "local_ts", f.V("local_ts"), "text", f.E("local_ts"), "Default 10.10.7.0/24.", false)
-			@field("Traffic selector remote (CIDR)", "remote_ts", f.V("remote_ts"), "text", f.E("remote_ts"), "", true)
-			@field("Pre-shared key", "psk", "", "password", f.E("psk"), ternary(f.Edit(), "Kosongkan untuk mempertahankan PSK lama", "PSK baru (8-128 karakter)"), !f.Edit())
+			@field("Remote ID (opsional)", "remote_id", f.V("remote_id"), "text", f.E("remote_id"), "Identitas IKE peer (IP atau FQDN). Kosong = sama dengan alamat remote.", false)
+			<p class="rounded-md bg-[#E8EEF9] px-3 py-2 text-xs text-[#2C3E87]">Isi subnet yang boleh saling akses lewat tunnel. Di site lawan isinya dibalik.</p>
+			@cidrList("Subnet LAN lokal (server ini)", "local_ts", f.V("local_ts"), "10.10.7.0/24", f.E("local_ts"), ternary(f.Edit(), "Satu CIDR per baris atau pisahkan koma (maks. 8). Kosong = tidak diubah.", "Satu CIDR per baris atau pisahkan koma (maks. 8). Kosong = LAN default server."), false)
+			@cidrList("Subnet LAN remote (site lawan)", "remote_ts", f.V("remote_ts"), "10.1.0.0/24\n10.2.0.0/24", f.E("remote_ts"), "Satu CIDR per baris atau pisahkan koma (maks. 8).", true)
+			@field("PSK (pre-shared key)", "psk", "", "password", f.E("psk"), ternary(f.Edit(), "Kosongkan untuk mempertahankan PSK lama", "Kunci rahasia yang sama di kedua site (8-128 karakter)"), !f.Edit())
 			@enabledBox(f.Enabled)
 			@formFooter(ternary(f.Edit(), "Simpan", "Buat"))
 		</form>
@@ -382,8 +437,8 @@ templ accountActions(u model.User) {
 templ connectionActions(c ConnRow) {
 	@rowActions("connection-menu-"+itoa(c.ID), c.Name) {
 		<button type="button" role="menuitem" hx-get={ idURL("/koneksi", c.ID, "/ubah") } hx-target="#modal">Ubah</button>
-		<button type="button" role="menuitem" hx-post={ idURL("/koneksi", c.ID, "/initiate") } hx-target="#conn-table" hx-swap="outerHTML">Initiate</button>
-		<button type="button" role="menuitem" hx-get={ idURL("/koneksi", c.ID, "/terminate") } hx-target="#modal">Terminate</button>
+		<button type="button" role="menuitem" hx-post={ idURL("/koneksi", c.ID, "/initiate") } hx-target="#conn-table" hx-swap="outerHTML" title="Mulai tunnel ke peer sekarang">Connect</button>
+		<button type="button" role="menuitem" hx-get={ idURL("/koneksi", c.ID, "/terminate") } hx-target="#modal" title="Putus tunnel; bisa connect ulang kapan saja">Disconnect</button>
 		<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/koneksi", c.ID, "/hapus") } hx-target="#modal">Hapus</button>
 	}
 }
@@ -400,30 +455,30 @@ templ PasswordForm(id int, username, errMsg, fieldErr string) {
 	}
 }
 
-// ---------- Kebijakan ----------
+// ---------- Firewall Rules (/kebijakan) ----------
 templ PoliciesPage(t PolicyTable) {
-	@PageHeader("Kebijakan Jaringan", "Tentukan trafik yang diizinkan melewati jaringan privat. Selain itu, forwarding VPN ditolak.", PrimaryButton("Buat Kebijakan", "/kebijakan/baru"))
+	@PageHeader("Firewall Rules", "Allow rule tambahan untuk traffic yang diforward antar jaringan (S2S/LAN). Default: deny. Akses user C2S tetap diatur dari Allowed CIDRs akun.", PrimaryButton("Buat Rule", "/kebijakan/baru"))
 	@VPNTabs("kebijakan")
 	@PoliciesTable(t)
 }
 
 templ PoliciesTable(t PolicyTable) {
 	<section id="policies-table" class="rounded-xl border border-[#DEE2E6]" hx-get="/kebijakan/tabel" hx-trigger="vpnaas:changed from:body" hx-swap="outerHTML" hx-include="this" hx-disinherit="*">
-		@tableHead(len(t.Rows), t.Total, "/kebijakan/tabel", "#policies-table", t.Query, "Cari kebijakan…")
+		@tableHead(len(t.Rows), t.Total, "/kebijakan/tabel", "#policies-table", t.Query, "Cari rule…")
 		<div class="px-5 pt-4 empty:hidden">
 			@FlashBox(t.Flash)
 			@ErrorBox(t.Err)
 		</div>
 		if len(t.Rows) == 0 {
-			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada kebijakan", "Buat kebijakan untuk mengizinkan trafik antar CIDR.")
+			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada firewall rule", "Buat allow rule untuk mengizinkan traffic antar CIDR.")
 		} else {
 			<div class="overflow-x-auto pb-1" tabindex="0" aria-label="Tabel dapat digeser horizontal">
 				<table class="min-w-full text-sm">
 					<thead class="bg-[#E9ECEF]">
 						<tr>
-							@th("Nama Kebijakan")
-							@th("CIDR Sumber")
-							@th("CIDR Tujuan")
+							@th("Nama")
+							@th("Source")
+							@th("Destination")
 							@th("Protokol")
 							@th("Status")
 							@th("Aksi")
@@ -455,7 +510,7 @@ templ PoliciesTable(t PolicyTable) {
 }
 
 templ PolicyForm(f Form) {
-	@Modal(ternary(f.Edit(), "Ubah Kebijakan", "Buat Kebijakan")) {
+	@Modal(ternary(f.Edit(), "Ubah Firewall Rule", "Buat Firewall Rule")) {
 		<form
 			if f.Edit() {
 				hx-put={ idURL("/kebijakan", f.ID, "") }
@@ -466,9 +521,9 @@ templ PolicyForm(f Form) {
 			class="space-y-4"
 		>
 			@ErrorBox(f.Err)
-			@field("Nama kebijakan", "name", f.V("name"), "text", f.E("name"), "", true)
-			@field("CIDR sumber", "source_cidr", f.V("source_cidr"), "text", f.E("source_cidr"), "Contoh: 10.250.0.0/24 (pool C2S)", true)
-			@field("CIDR tujuan", "destination_cidr", f.V("destination_cidr"), "text", f.E("destination_cidr"), "Contoh: 10.10.7.0/24", true)
+			@field("Nama rule", "name", f.V("name"), "text", f.E("name"), "", true)
+			@field("Source CIDR", "source_cidr", f.V("source_cidr"), "text", f.E("source_cidr"), "Jaringan asal traffic, mis. 10.1.0.0/24 (LAN site lawan)", true)
+			@field("Destination CIDR", "destination_cidr", f.V("destination_cidr"), "text", f.E("destination_cidr"), "Jaringan tujuan traffic, mis. 10.10.7.0/24 (LAN server ini). Hanya arah source → destination yang diizinkan.", true)
 			<label class="block text-sm font-semibold">
 				Protokol
 				<select name="protocol" class={ inputClass(f.E("protocol")) }>

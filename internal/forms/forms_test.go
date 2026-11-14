@@ -75,7 +75,7 @@ func TestConnection(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatal(errs)
 	}
-	want := map[string]any{"name": "branch", "remote_address": "203.0.113.5", "local_ts": "10.10.7.0/24", "remote_ts": "192.168.50.0/24", "psk": "pre-shared-key", "enabled": true}
+	want := map[string]any{"name": "branch", "remote_address": "203.0.113.5", "remote_ts": "192.168.50.0/24", "psk": "pre-shared-key", "enabled": true}
 	if !reflect.DeepEqual(body, want) {
 		t.Fatalf("got %#v", body)
 	}
@@ -153,5 +153,32 @@ func TestUserMaxSessionsAndOptionalCIDRs(t *testing.T) {
 		if _, errs := User(vals("username", "a", "max_sessions", v), false); errs["max_sessions"] == "" {
 			t.Errorf("%s accepted", v)
 		}
+	}
+}
+
+func TestConnectionMultiCIDR(t *testing.T) {
+	body, errs := Connection(vals("name", "b", "remote_address", "203.0.113.5", "local_ts", "10.10.7.0/24\r\n10.10.8.0/24, 10.10.7.0/24", "remote_ts", "192.168.50.0/24,192.168.51.0/24", "psk", "pre-shared-key"), true)
+	if len(errs) != 0 || body["local_ts"] != "10.10.7.0/24,10.10.8.0/24" || body["remote_ts"] != "192.168.50.0/24,192.168.51.0/24" {
+		t.Fatalf("join: %v %v", errs, body)
+	}
+	// blank local selector is omitted: backend applies its LAN default (create) or keeps the stored value (edit)
+	body, errs = Connection(vals("name", "b", "remote_address", "203.0.113.5", "local_ts", "  ", "remote_ts", "192.168.50.0/24", "psk", "pre-shared-key"), true)
+	if _, ok := body["local_ts"]; ok || len(errs) != 0 {
+		t.Fatalf("blank local_ts must be omitted: %v %v", errs, body)
+	}
+	nine := ""
+	for i := 0; i < 9; i++ {
+		nine += "10.1." + string(rune('0'+i)) + ".0/24\n"
+	}
+	for field, v := range map[string]url.Values{
+		"remote_ts": vals("name", "b", "remote_address", "1.2.3.4", "remote_ts", nine, "psk", "pre-shared-key"),
+		"local_ts":  vals("name", "b", "remote_address", "1.2.3.4", "local_ts", "0.0.0.0/0", "remote_ts", "1.2.3.0/24", "psk", "pre-shared-key"),
+	} {
+		if _, errs := Connection(v, true); errs[field] == "" {
+			t.Errorf("%s: expected error, got %v", field, errs)
+		}
+	}
+	if _, errs := Connection(vals("name", "b", "remote_address", "1.2.3.4", "remote_ts", "1.2.3.0/24,bad", "psk", "pre-shared-key"), true); !strings.Contains(errs["remote_ts"], "bad") {
+		t.Errorf("invalid item must be named: %v", errs)
 	}
 }

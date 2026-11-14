@@ -280,8 +280,8 @@ func TestPagesRenderAndEscape(t *testing.T) {
 	e := setup(t)
 	e.login()
 	checks := map[string][]string{
-		"/ringkasan": {"Ringkasan", "Koneksi S2S", "Akun C2S", "Kebijakan", "strongSwan swanctl"},
-		"/koneksi":   {"branch", "203.0.113.5", "192.168.50.0/24", "Active", "Initiate", "Terminate"},
+		"/ringkasan": {"Ringkasan", "Koneksi S2S", "Akun C2S", "Firewall Rules", "strongSwan swanctl"},
+		"/koneksi":   {"branch", "203.0.113.5", "192.168.50.0/24", "Active", "Connect", "Disconnect"},
 		"/akun":      {"poc-client", "Enabled", "Disabled", "Active", "Down", "10.250.0.4", "Split", "/unduh/akun/3/profil.json", "/unduh/akun/3/windows.ps1", "Setup-Client(windows).ps1"},
 		"/kebijakan": {"lan", "10.250.0.0/24", "TCP"},
 		"/status":    {"ESTABLISHED", "strongSwan swanctl", "pool-3"},
@@ -435,7 +435,7 @@ func TestConnectionAndPolicyCRUD(t *testing.T) {
 	e := setup(t)
 	e.login()
 	res, _ := e.do("POST", "/koneksi", url.Values{"name": {"tmp"}, "remote_address": {"198.51.100.7"}, "remote_ts": {"192.168.77.0/24"}, "psk": {"pre-shared-key"}, "enabled": {"on"}}, e.safe())
-	if res.StatusCode != 200 || e.api.bodies[len(e.api.bodies)-1]["local_ts"] != "10.10.7.0/24" {
+	if _, sent := e.api.bodies[len(e.api.bodies)-1]["local_ts"]; res.StatusCode != 200 || sent {
 		t.Fatal("create connection")
 	}
 	res, body := e.do("POST", "/koneksi/4/initiate", nil, e.safe())
@@ -532,7 +532,7 @@ func TestEmptyStates(t *testing.T) {
 		t.Fatal("empty connections")
 	}
 	_, body = e.do("GET", "/kebijakan", nil, nil)
-	if !strings.Contains(body, "Belum ada kebijakan") {
+	if !strings.Contains(body, "Belum ada firewall rule") {
 		t.Fatal("empty policies")
 	}
 	_, body = e.do("GET", "/akun/tabel?q=zzzz", nil, map[string]string{"HX-Request": "true"})

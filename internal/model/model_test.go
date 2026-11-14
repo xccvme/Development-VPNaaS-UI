@@ -96,3 +96,16 @@ func TestSessionLabelWithMax(t *testing.T) {
 		t.Fatal("default limit")
 	}
 }
+
+func TestConnectionSubnetLists(t *testing.T) {
+	c := Connection{LocalTS: "10.10.7.0/24", RemoteTS: "192.168.1.0/24, 192.168.2.0/24,"}
+	if l := c.LocalList(); len(l) != 1 || l[0] != "10.10.7.0/24" {
+		t.Fatal(l)
+	}
+	if r := c.RemoteList(); len(r) != 2 || r[1] != "192.168.2.0/24" {
+		t.Fatal(r)
+	}
+	if SplitCSV("") != nil {
+		t.Fatal("empty")
+	}
+}

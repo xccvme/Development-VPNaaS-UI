@@ -99,6 +99,21 @@ type Connection struct {
 
 func (c Connection) AdminLabel() string { return adminLabel(c.Enabled) }
 
+// SplitCSV splits a backend traffic-selector string ("a,b" or a legacy single
+// CIDR) into trimmed, non-empty items; nil when empty.
+func SplitCSV(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func (c Connection) LocalList() []string  { return SplitCSV(c.LocalTS) }
+func (c Connection) RemoteList() []string { return SplitCSV(c.RemoteTS) }
+
 type Policy struct {
 	ID              int    `json:"id"`
 	Name            string `json:"name"`

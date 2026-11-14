@@ -12,7 +12,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"io"
-	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
@@ -83,12 +82,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) routes() {
-	sub, _ := fs.Sub(staticFS, "static")
-	files := http.FileServer(http.FS(sub))
-	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		files.ServeHTTP(w, r)
-	})))
+	s.mux.HandleFunc("GET /static/", serveStatic)
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	s.mux.HandleFunc("GET /login", s.loginPage)
 	s.mux.HandleFunc("POST /login", s.login)
@@ -339,7 +333,7 @@ func (s *Server) fetchConnections(r *http.Request) ([]views.ConnRow, string, str
 }
 
 var kvLabels = map[string]string{
-	"connections": "Koneksi", "enabled_connections": "Koneksi aktif (admin)", "users": "Akun", "policies": "Kebijakan",
+	"connections": "Koneksi", "enabled_connections": "Koneksi aktif (admin)", "users": "Akun", "policies": "Firewall rules",
 	"backend": "Backend", "pools": "Pool alamat", "raw": "SA aktif (swanctl --list-sas)",
 }
 
@@ -433,10 +427,10 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, sess auth.Sess
 	o.Cards = []views.Card{
 		{Label: "Koneksi S2S", Value: count(len(conns), cerr), Note: connNote, Href: "/koneksi", Ok: cerr == "" && serr == ""},
 		{Label: "Akun C2S", Value: count(len(users), uerr), Note: userNote, Href: "/akun", Ok: uerr == "" && unknown == 0},
-		{Label: "Kebijakan", Value: count(len(policies), errText(perr)), Note: "Aturan forwarding terkonfigurasi", Href: "/kebijakan", Ok: perr == nil},
+		{Label: "Firewall Rules", Value: count(len(policies), errText(perr)), Note: "Allow rule forwarding antar jaringan", Href: "/kebijakan", Ok: perr == nil},
 		{Label: "Telemetri Gateway", Value: gw, Note: "Respons endpoint status runtime", Href: "/status", Ok: serr == ""},
 	}
-	for _, e := range []struct{ name, err string }{{"Ringkasan", errText(oerr)}, {"Koneksi", cerr}, {"Akun", uerr}, {"Kebijakan", errText(perr)}, {"Status", serr}} {
+	for _, e := range []struct{ name, err string }{{"Ringkasan", errText(oerr)}, {"Koneksi", cerr}, {"Akun", uerr}, {"Firewall Rules", errText(perr)}, {"Status", serr}} {
 		if e.err != "" {
 			o.Errors = append(o.Errors, e.name+": "+e.err)
 		}
@@ -570,7 +564,7 @@ func (s *Server) policies(w http.ResponseWriter, r *http.Request, sess auth.Sess
 		render(w, r, views.PoliciesTable(t))
 		return
 	}
-	s.page(w, r, sess, "kebijakan", "Kebijakan", views.PoliciesPage(t))
+	s.page(w, r, sess, "kebijakan", "Firewall Rules", views.PoliciesPage(t))
 }
 
 // ---------- forms ----------
@@ -639,7 +633,11 @@ func (s *Server) loadForm(w http.ResponseWriter, r *http.Request, kind string, k
 }
 
 func (s *Server) connectionForm(w http.ResponseWriter, r *http.Request, _ auth.Session) {
-	if f, ok := s.loadForm(w, r, "connections", []string{"name", "remote_address", "remote_id", "local_ts", "remote_ts"}, map[string]string{"local_ts": forms.DefaultLAN}); ok {
+	if f, ok := s.loadForm(w, r, "connections", []string{"name", "remote_address", "remote_id", "local_ts", "remote_ts"}, nil); ok {
+		// Stored selectors are comma lists; the textarea shows one CIDR per line.
+		for _, k := range []string{"local_ts", "remote_ts"} {
+			f.Values[k] = strings.Join(model.SplitCSV(f.Values[k]), "\n")
+		}
 		render(w, r, views.ConnectionForm(f))
 	}
 }
@@ -726,7 +724,7 @@ func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request, _ auth.S
 }
 
 func (s *Server) savePolicy(w http.ResponseWriter, r *http.Request, _ auth.Session) {
-	s.save(w, r, "policies", "Kebijakan", func(v url.Values, _ bool) (map[string]any, forms.Errors) { return forms.Policy(v) }, views.PolicyForm)
+	s.save(w, r, "policies", "Firewall rule", func(v url.Values, _ bool) (map[string]any, forms.Errors) { return forms.Policy(v) }, views.PolicyForm)
 }
 
 func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request, _ auth.Session) {
@@ -754,7 +752,7 @@ func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request, _ auth.Se
 var kindLabel = map[string]struct{ label, base, field string }{
 	"users":       {"akun", "/akun", "username"},
 	"connections": {"koneksi", "/koneksi", "name"},
-	"policies":    {"kebijakan", "/kebijakan", "name"},
+	"policies":    {"firewall rule", "/kebijakan", "name"},
 }
 
 func (s *Server) confirm(kind string) handler {
@@ -785,8 +783,8 @@ func (s *Server) confirmTerminate(w http.ResponseWriter, r *http.Request, _ auth
 	}
 	row, err := s.findRecord(r, "connections", id)
 	render(w, r, views.ConfirmModal(views.Confirm{
-		Title: "Terminate koneksi", Message: "Putuskan tunnel ini? Trafik aktif dapat terganggu.",
-		Name: strVal(row, "name"), URL: "/koneksi/" + strconv.Itoa(id) + "/terminate", Button: "Terminate", Err: errText(err),
+		Title: "Disconnect koneksi", Message: "Putus tunnel ini sekarang? Trafik yang sedang lewat akan terhenti; bisa connect ulang kapan saja.",
+		Name: strVal(row, "name"), URL: "/koneksi/" + strconv.Itoa(id) + "/terminate", Button: "Disconnect", Err: errText(err),
 	}))
 }
 
@@ -808,7 +806,8 @@ func (s *Server) remove(kind string) handler {
 	}
 }
 
-var actionLabel = map[string]string{"initiate": "Initiate", "terminate": "Terminate"}
+// UI wording: Connect = swanctl initiate, Disconnect = terminate (routes unchanged).
+var actionLabel = map[string]string{"initiate": "Connect", "terminate": "Disconnect"}
 
 func (s *Server) connectionAction(action string) handler {
 	return func(w http.ResponseWriter, r *http.Request, _ auth.Session) {
@@ -821,14 +820,22 @@ func (s *Server) connectionAction(action string) handler {
 		defer cancel()
 		var out map[string]any
 		_, err := s.up.JSON(ctx, "POST", "connections/"+strconv.Itoa(id)+"/"+action, nil, &out)
-		flash := &views.Flash{Message: actionLabel[action] + " koneksi ID " + strconv.Itoa(id) + " berhasil"}
+		t := s.connTable(r, nil)
+		name := "ID " + strconv.Itoa(id)
+		for _, c := range t.Rows {
+			if c.ID == id {
+				name = c.Name
+			}
+		}
+		flash := &views.Flash{Message: actionLabel[action] + " koneksi " + name + " berhasil"}
 		if err != nil {
-			flash = &views.Flash{Message: actionLabel[action] + " gagal: " + err.Error(), Error: true}
+			flash = &views.Flash{Message: actionLabel[action] + " gagal (" + name + "): " + err.Error(), Error: true}
 		} else if o, ok := out["output"].(string); ok {
 			flash.Output = o
 		}
+		t.Flash = flash
 		w.Header().Set("HX-Trigger", `{"vpnaas:close":true}`)
-		render(w, r, views.ConnectionsTable(s.connTable(r, flash)))
+		render(w, r, views.ConnectionsTable(t))
 	}
 }
 

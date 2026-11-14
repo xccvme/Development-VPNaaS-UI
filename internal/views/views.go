@@ -25,7 +25,7 @@ var Nav = []NavItem{
 	{"ringkasan", "Ringkasan", "/ringkasan", "grid"},
 	{"koneksi", "Koneksi S2S", "/koneksi", "link"},
 	{"akun", "Akun C2S", "/akun", "user"},
-	{"kebijakan", "Kebijakan", "/kebijakan", "shield"},
+	{"kebijakan", "Firewall", "/kebijakan", "shield"},
 	{"status", "Status Runtime", "/status", "pulse"},
 	{"audit", "Audit", "/audit", "clock"},
 }

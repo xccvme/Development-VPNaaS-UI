@@ -105,4 +105,17 @@
   window.addEventListener('resize', () => closeActions(false));
   document.addEventListener('scroll', (e) => { if (!actions || !menuOf(actions).contains(e.target)) closeActions(false); }, true);
   document.addEventListener('htmx:beforeSwap', () => closeActions(false));
+
+  // Pause hx-trigger="every 30s" table polling while the tab is hidden; polls
+  // carry no triggering event, user actions (Muat ulang, search) always do.
+  // On return, refresh once so the table is not stale.
+  document.addEventListener('htmx:beforeRequest', (e) => {
+    if (document.visibilityState === 'hidden' && !(e.detail.requestConfig && e.detail.requestConfig.triggeringEvent)) e.preventDefault();
+  });
+  let hiddenSince = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { hiddenSince = Date.now(); return; }
+    if (hiddenSince && Date.now() - hiddenSince > 30000 && window.htmx && !document.querySelector('#modal > *')) htmx.trigger(document.body, 'vpnaas:changed');
+    hiddenSince = 0;
+  });
 })();

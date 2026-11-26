@@ -129,13 +129,13 @@ templ textInput(label, name, value, placeholder, errMsg, hint string, required b
 templ enabledBox(on bool) {
 	<label class="flex items-center gap-2 text-sm font-semibold">
 		<input type="checkbox" name="enabled" checked?={ on } class="h-4 w-4 accent-[#2F6BC4]"/>
-		Enabled (administratif)
+		Enabled
 	</label>
 }
 
 templ formFooter(submit string) {
 	<div class="flex justify-end gap-2 border-t border-[#DEE2E6] pt-4">
-		<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Batal</button>
+		<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Cancel</button>
 		<button type="submit" class="rounded-full bg-[#2F6BC4] px-5 py-2 text-sm font-semibold text-white hover:bg-[#2559A8]">{ submit }</button>
 	</div>
 }
@@ -146,7 +146,7 @@ templ ConfirmModal(c Confirm) {
 		<p class="text-sm text-[#495057]">{ c.Message }</p>
 		<p class="mt-2 rounded-md bg-[#F8F9FA] px-3 py-2 font-mono text-sm">{ c.Name }</p>
 		<div class="mt-5 flex justify-end gap-2">
-			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Batal</button>
+			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Cancel</button>
 			if c.Button == "Disconnect" || c.Method == "post" {
 				<button type="button" hx-post={ c.URL } hx-target={ ternary(c.Target != "", c.Target, "#sites-table") } hx-swap="outerHTML" class="rounded-full bg-[#DC3545] px-5 py-2 text-sm font-semibold text-white hover:bg-[#B02A37]">{ c.Button }</button>
 			} else {
@@ -176,14 +176,14 @@ templ emptyOrNoMatch(total int, hasErr bool, title, detail string) {
 
 // ---------- Akun C2S ----------
 templ UsersPage(t UserTable) {
-	@PageHeader("Client-to-Site (C2S)", "Kelola akses remote client IPsec/IKEv2 ke VPC/NAT server, site S2S tertentu, atau seluruh site yang ada.", PrimaryButton("Buat Akun", "/akun/baru"))
+	@PageHeader("Client-to-Site (C2S)", "Kelola akses remote client IPsec/IKEv2 ke VPC/NAT server, site S2S tertentu, atau seluruh site yang ada.", PrimaryButton("Create Account", "/akun/baru"))
 	@VPNTabs("akun")
 	@UsersTable(t)
 }
 
 templ UsersTable(t UserTable) {
 	<section id="users-table" class="rounded-xl border border-[#DEE2E6]" hx-get="/akun/tabel" hx-trigger="every 30s, vpnaas:changed from:body" hx-swap="outerHTML" hx-include="this" hx-disinherit="*">
-		@tableHead(len(t.Rows), t.Total, "/akun/tabel", "#users-table", t.Query, "Cari akun…")
+		@tableHead(len(t.Rows), t.Total, "/akun/tabel", "#users-table", t.Query, "Search account…")
 		<div class="px-5 pt-4 empty:hidden">
 			@FlashBox(t.Flash)
 			@ErrorBox(t.Err)
@@ -192,19 +192,19 @@ templ UsersTable(t UserTable) {
 			}
 		</div>
 		if len(t.Rows) == 0 {
-			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada akun", "Buat akun C2S pertama untuk akses ke VPC server atau site S2S.")
+			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada akun C2S", "Buat akun C2S pertama untuk akses ke VPC server atau site S2S.")
 		} else {
 			<div class="overflow-x-auto pb-1" tabindex="0" aria-label="Tabel dapat digeser horizontal">
 				<table class="min-w-full text-sm">
 					<thead class="bg-[#E9ECEF]">
 						<tr>
 							@th("Username")
-							@th("Tujuan Akses (VPC / Site / CIDR)")
+							@th("Access Target (VPC / Site / CIDR)")
 							@th("Admin")
 							@th("Status & Last Connect")
-							@th("Sesi")
+							@th("Sessions")
 							@th("Virtual IP")
-							@th("Aksi")
+							@th("Actions")
 						</tr>
 					</thead>
 					<tbody>
@@ -228,13 +228,13 @@ templ UsersTable(t UserTable) {
 											@Badge("VPC")
 										}
 										if u.AllowAllSites {
-											@Badge("Semua Site")
+											@Badge("All Sites")
 										}
 										for _, sn := range namesFromIDs(u.AllowedSites, t.SiteNames) {
 											<span class="rounded bg-[#E8EEF9] px-2 py-0.5 text-xs font-semibold text-[#2F6BC4]">Site: { sn }</span>
 										}
 										for _, gn := range namesFromIDs(u.Groups, t.GroupNames) {
-											<span class="rounded bg-[#EDE7F6] px-2 py-0.5 text-xs font-semibold text-[#5E35B1]">Grup: { gn }</span>
+											<span class="rounded bg-[#EDE7F6] px-2 py-0.5 text-xs font-semibold text-[#5E35B1]">Group: { gn }</span>
 										}
 									</div>
 									<div class="mt-1 text-[#495057]">{ model.Join(u.DisplayCIDRs()) }</div>
@@ -266,12 +266,12 @@ templ UsersTable(t UserTable) {
 }
 
 templ UserSessions(u model.User, errMsg string) {
-	@Modal("Detail Sesi") {
+	@Modal("Session Detail") {
 		@ErrorBox(errMsg)
 		if errMsg == "" {
 			<p class="mb-4 text-sm font-semibold">{ u.Username } · ID { itoa(u.ID) } · { u.OnlineLabel() } · Sesi { u.SessionLabel() }</p>
 			if len(u.Sessions) == 0 {
-				<p class="text-sm text-[#6C757D]">Tidak ada sesi aktif. Terakhir terkoneksi: { u.LastConnectDisplay() }</p>
+				<p class="text-sm text-[#6C757D]">Tidak ada sesi aktif. Last connect: { u.LastConnectDisplay() }</p>
 			}
 			<div class="max-h-96 space-y-3 overflow-y-auto">
 				for _, s := range u.Sessions {
@@ -279,10 +279,10 @@ templ UserSessions(u model.User, errMsg string) {
 						<div class="flex items-center justify-between gap-2">
 							<div>IKE #{ s.IKEID } · { s.IKEState }</div>
 							if s.IKEID != "" {
-								<button type="button" hx-post={ "/akun/" + itoa(u.ID) + "/sesi/" + s.IKEID + "/disconnect" } hx-target="#modal" class="rounded-full border border-[#F5C2C7] px-2.5 py-0.5 font-sans text-xs font-semibold text-[#B3261E] hover:bg-[#FDECEA]">Putus</button>
+								<button type="button" hx-post={ "/akun/" + itoa(u.ID) + "/sesi/" + s.IKEID + "/disconnect" } hx-target="#modal" class="rounded-full border border-[#F5C2C7] px-2.5 py-0.5 font-sans text-xs font-semibold text-[#B3261E] hover:bg-[#FDECEA]">Disconnect</button>
 							}
 						</div>
-						<div>dari { s.RemoteAddress }</div>
+						<div>from { s.RemoteAddress }</div>
 						<div>VIP { model.Join(s.VirtualIPs) }</div>
 						for _, c := range s.Children {
 							<div class="mt-2">CHILD #{ c.ChildID } · { c.State } · in { model.Bytes(c.BytesIn) } · out { model.Bytes(c.BytesOut) }</div>
@@ -292,13 +292,13 @@ templ UserSessions(u model.User, errMsg string) {
 			</div>
 		}
 		<div class="mt-5 flex justify-end border-t border-[#DEE2E6] pt-4">
-			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Tutup</button>
+			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Close</button>
 		</div>
 	}
 }
 
 templ UserForm(f Form) {
-	@Modal(ternary(f.Edit(), "Ubah Akun", "Buat Akun")) {
+	@Modal(ternary(f.Edit(), "Edit Account", "Create Account")) {
 		<form
 			if f.Edit() {
 				hx-put={ idURL("/akun", f.ID, "") }
@@ -366,7 +366,7 @@ templ UserForm(f Form) {
 			</fieldset>
 			if len(f.Groups) > 0 {
 				<fieldset class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
-					<legend class="px-1 text-sm font-semibold">Grup C2S (opsional)</legend>
+					<legend class="px-1 text-sm font-semibold">C2S Groups (opsional)</legend>
 					<input type="hidden" name="groups_present" value="1"/>
 					<div class="flex flex-wrap gap-3">
 						for _, g := range f.Groups {
@@ -380,17 +380,17 @@ templ UserForm(f Form) {
 			}
 			if hasCertType(f.Certs, "user") || (f.V("auth_method") != "" && f.V("auth_method") != "eap-mschapv2") || f.E("cert_id") != "" || f.E("auth_method") != "" {
 				<fieldset class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
-					<legend class="px-1 text-sm font-semibold">Metode Autentikasi</legend>
+					<legend class="px-1 text-sm font-semibold">Authentication Method</legend>
 					<select name="auth_method" class={ inputClass(f.E("auth_method")) }>
 						<option value="eap-mschapv2" selected?={ f.V("auth_method") == "" || f.V("auth_method") == "eap-mschapv2" }>EAP-MSCHAPv2 (Username &amp; Password)</option>
-						<option value="pubkey" selected?={ f.V("auth_method") == "pubkey" }>Sertifikat X.509 (Mutual Certificate)</option>
+						<option value="pubkey" selected?={ f.V("auth_method") == "pubkey" }>X.509 Certificate (Mutual Certificate)</option>
 						<option value="eap-tls" selected?={ f.V("auth_method") == "eap-tls" }>EAP-TLS (Client Certificate)</option>
 					</select>
 					if f.E("auth_method") != "" {
 						<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("auth_method") }</span>
 					}
 					<label class="block text-xs font-semibold text-[#495057]">
-						Sertifikat Client (untuk X.509 / EAP-TLS)
+						Client Certificate (untuk X.509 / EAP-TLS)
 						<select name="cert_id" class={ inputClass(f.E("cert_id")) }>
 							<option value="">— Tanpa sertifikat client —</option>
 							for _, cert := range f.Certs {
@@ -408,14 +408,14 @@ templ UserForm(f Form) {
 			@trafficMode(f)
 			@maxSessions(f)
 			@enabledBox(f.Enabled)
-			@formFooter(ternary(f.Edit(), "Simpan", "Buat"))
+			@formFooter(ternary(f.Edit(), "Save", "Create"))
 		</form>
 	}
 }
 
 templ maxSessions(f Form) {
 	<label class="block text-sm font-semibold">
-		Maks. koneksi bersamaan
+		Max Concurrent Sessions
 		<select name="max_sessions" class={ inputClass(f.E("max_sessions")) }>
 			for _, n := range []string{"1", "2", "3"} {
 				<option value={ n } selected?={ maxSessionsValue(f) == n }>{ n }</option>
@@ -430,8 +430,8 @@ templ maxSessions(f Form) {
 
 templ trafficMode(f Form) {
 	<fieldset class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
-		<legend class="px-1 text-sm font-semibold">Mode trafik</legend>
-		<select name="traffic_mode" aria-label="Mode trafik" class={ inputClass(f.E("traffic_mode")) }>
+		<legend class="px-1 text-sm font-semibold">Traffic Mode</legend>
+		<select name="traffic_mode" aria-label="Traffic Mode" class={ inputClass(f.E("traffic_mode")) }>
 			<option value="split" selected?={ f.V("traffic_mode") != "full" }>Split tunnel (default)</option>
 			<option value="full" selected?={ f.V("traffic_mode") == "full" }>Full tunnel</option>
 		</select>
@@ -447,10 +447,10 @@ templ trafficMode(f Form) {
 // opens on click only and closes on outside click, Escape or selection.
 templ rowActions(menuID, name string) {
 	<div data-row-actions>
-		<button type="button" data-actions-toggle aria-label={ "Aksi untuk " + name } aria-haspopup="menu" aria-expanded="false" aria-controls={ menuID } class="kebab-button">
+		<button type="button" data-actions-toggle aria-label={ "Actions for " + name } aria-haspopup="menu" aria-expanded="false" aria-controls={ menuID } class="kebab-button">
 			<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg>
 		</button>
-		<div id={ menuID } class="action-menu" role="menu" aria-label={ "Aksi " + name } popover="manual">
+		<div id={ menuID } class="action-menu" role="menu" aria-label={ "Actions " + name } popover="manual">
 			{ children... }
 		</div>
 	</div>
@@ -458,17 +458,17 @@ templ rowActions(menuID, name string) {
 
 templ accountActions(u model.User) {
 	@rowActions("account-menu-"+itoa(u.ID), u.Username) {
-		<button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/configure") } hx-target="#modal">Detail Akun</button>
-		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/manual.conf")) } download>Panduan Config Manual (.conf)</a>
-		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/profil.json")) } download title="Profil berisi kredensial; simpan dengan aman">Profil VPN (.json)</a>
-		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/vpnaas-ca.crt")) } download>Download Sertifikat (.crt)</a>
+		<button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/configure") } hx-target="#modal">Detail Account</button>
+		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/manual.conf")) } download>Manual Config (.conf)</a>
+		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/profil.json")) } download title="Profil berisi kredensial; simpan dengan aman">VPN Profile (.json)</a>
+		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/vpnaas-ca.crt")) } download>Download Cert (.crt)</a>
 		<button type="button" role="menuitem" hx-post={ idURL("/akun", u.ID, "/disconnect") } hx-target="#users-table" hx-swap="outerHTML">Disconnect</button>
-		<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/akun", u.ID, "/hapus") } hx-target="#modal">Hapus</button>
+		<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/akun", u.ID, "/hapus") } hx-target="#modal">Delete</button>
 	}
 }
 
 templ UserConfigureModal(d UserConfigureData) {
-	@ModalWide("Detail Akun: " + d.User.Username) {
+	@ModalWide("Detail Account: " + d.User.Username) {
 		@ErrorBox(d.Err)
 		if d.Err == "" {
 			<div class="space-y-4 text-sm">
@@ -480,58 +480,58 @@ templ UserConfigureModal(d UserConfigureData) {
 						@Badge("FIPS IKEv2")
 					</div>
 					<div class="flex flex-wrap items-center gap-2">
-						<button type="button" hx-get={ idURL("/akun", d.User.ID, "/ubah") } hx-target="#modal" class="rounded-full bg-[#2F6BC4] px-4 py-2 text-xs font-semibold text-white hover:bg-[#2559A8]">Ubah Akun</button>
+						<button type="button" hx-get={ idURL("/akun", d.User.ID, "/ubah") } hx-target="#modal" class="rounded-full bg-[#2F6BC4] px-4 py-2 text-xs font-semibold text-white hover:bg-[#2559A8]">Edit Account</button>
 						<button type="button" hx-get={ idURL("/akun", d.User.ID, "/password") } hx-target="#modal" class="rounded-full border border-[#CED4DA] px-4 py-2 text-xs font-semibold text-[#212529] hover:bg-[#F8F9FA]">Reset Password</button>
 					</div>
 				</div>
 				<div class="rounded-lg bg-[#F8F9FA] p-4 font-mono text-xs space-y-1">
 					<div><strong>Server Gateway (Remote Addr &amp; ID):</strong> { ternary(d.HubPublicIP != "", d.HubPublicIP, "—") } · UDP 500 &amp; 4500</div>
 					<div><strong>Username / Auth:</strong> { d.User.Username } · { d.User.AuthLabel() }</div>
-					<div><strong>Virtual IP:</strong> { ternary(d.User.VirtualIP != "", d.User.VirtualIP, "—") } · <strong>Mode Trafik:</strong> { d.User.TrafficLabel() }</div>
+					<div><strong>Virtual IP:</strong> { ternary(d.User.VirtualIP != "", d.User.VirtualIP, "—") } · <strong>Traffic Mode:</strong> { d.User.TrafficLabel() }</div>
 					<div><strong>Crypto FIPS:</strong> IKE aes256-sha256-modp2048 (DH14) · ESP aes256-sha256</div>
 					<div class="mt-1 flex flex-wrap items-center gap-1">
-						<strong>Tujuan Akses:</strong>
+						<strong>Access Target:</strong>
 						if d.User.AllowVPC {
 							@Badge("VPC")
 						}
 						if d.User.AllowAllSites {
-							@Badge("Semua Site")
+							@Badge("All Sites")
 						}
 						for _, sn := range namesFromIDs(d.User.AllowedSites, d.SiteNames) {
 							<span class="rounded bg-[#E8EEF9] px-2 py-0.5 text-xs font-semibold text-[#2F6BC4]">Site: { sn }</span>
 						}
 						for _, gn := range namesFromIDs(d.User.Groups, d.GroupNames) {
-							<span class="rounded bg-[#EDE7F6] px-2 py-0.5 text-xs font-semibold text-[#5E35B1]">Grup: { gn }</span>
+							<span class="rounded bg-[#EDE7F6] px-2 py-0.5 text-xs font-semibold text-[#5E35B1]">Group: { gn }</span>
 						}
 					</div>
-					<div><strong>Subnet Tujuan Diizinkan:</strong> { model.Join(d.User.DisplayCIDRs()) }</div>
+					<div><strong>Allowed Subnets:</strong> { model.Join(d.User.DisplayCIDRs()) }</div>
 					<div><strong>Last Connect:</strong> { d.User.LastConnectDisplay() }</div>
 					if d.Cert != nil {
-						<div><strong>Sertifikat Client:</strong> { d.Cert.Name } (SAN: { d.Cert.SAN } · Serial #{ d.Cert.Serial })</div>
+						<div><strong>Client Certificate:</strong> { d.Cert.Name } (SAN: { d.Cert.SAN } · Serial #{ d.Cert.Serial })</div>
 					}
 				</div>
 				<div>
-					<div class="mb-2 text-xs font-semibold text-[#495057]">Unduh Profil &amp; Konfigurasi Client</div>
+					<div class="mb-2 text-xs font-semibold text-[#495057]">Download Client Profile &amp; Config</div>
 					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/manual.conf")) } download class="rounded-lg bg-[#2F6BC4] px-3 py-2.5 text-center font-semibold text-white hover:bg-[#2559A8]">Panduan Config Manual (.conf)</a>
-						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/profil.json")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Profil VPN (.json)</a>
+						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/manual.conf")) } download class="rounded-lg bg-[#2F6BC4] px-3 py-2.5 text-center font-semibold text-white hover:bg-[#2559A8]">Manual Config (.conf)</a>
+						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/profil.json")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">VPN Profile (.json)</a>
 					</div>
 				</div>
 				<div class="rounded-lg border border-[#DEE2E6] p-3">
-					<div class="mb-2 text-xs font-semibold text-[#495057]">Sertifikat X.509 (Root CA &amp; Sertifikat Client)</div>
+					<div class="mb-2 text-xs font-semibold text-[#495057]">X.509 Certificates (Root CA &amp; Client Cert)</div>
 					<div class="flex flex-wrap gap-2">
-						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/vpnaas-ca.crt")) } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Download Sertifikat (.crt)</a>
+						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/vpnaas-ca.crt")) } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Download Cert (.crt)</a>
 						if d.User.CertID != nil {
 							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.User.CertID) + "/cert.crt") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Client Cert (.crt)</a>
 							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.User.CertID) + "/key.key") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Private Key (.key)</a>
-							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.User.CertID) + "/bundle.p12") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Bundle PKCS#12 (.p12)</a>
+							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.User.CertID) + "/bundle.p12") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Cert + Key Bundle (.p12)</a>
 						}
 					</div>
 				</div>
 			</div>
 		}
 		<div class="mt-5 flex justify-end border-t border-[#DEE2E6] pt-4">
-			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Tutup</button>
+			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Close</button>
 		</div>
 	}
 }
@@ -550,31 +550,31 @@ templ PasswordForm(id int, username, errMsg, fieldErr string) {
 
 // ---------- Firewall Rules (/kebijakan) ----------
 templ PoliciesPage(t PolicyTable) {
-	@PageHeader("Firewall Rules", "Allow rule tambahan untuk traffic yang diforward antar jaringan (S2S/LAN). Default: deny. Akses user C2S tetap diatur dari Allowed CIDRs akun.", PrimaryButton("Buat Rule", "/kebijakan/baru"))
+	@PageHeader("Firewall Rules", "Allow/Deny rule tambahan untuk traffic antar jaringan (S2S/LAN/C2S). Default: deny. Akses user C2S tetap diatur dari Allowed CIDRs akun.", PrimaryButton("Create Rule", "/kebijakan/baru"))
 	@VPNTabs("kebijakan")
 	@PoliciesTable(t)
 }
 
 templ PoliciesTable(t PolicyTable) {
 	<section id="policies-table" class="rounded-xl border border-[#DEE2E6]" hx-get="/kebijakan/tabel" hx-trigger="vpnaas:changed from:body" hx-swap="outerHTML" hx-include="this" hx-disinherit="*">
-		@tableHead(len(t.Rows), t.Total, "/kebijakan/tabel", "#policies-table", t.Query, "Cari rule…")
+		@tableHead(len(t.Rows), t.Total, "/kebijakan/tabel", "#policies-table", t.Query, "Search rule…")
 		<div class="px-5 pt-4 empty:hidden">
 			@FlashBox(t.Flash)
 			@ErrorBox(t.Err)
 		</div>
 		if len(t.Rows) == 0 {
-			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada firewall rule", "Buat allow rule untuk mengizinkan traffic antar CIDR.")
+			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada firewall rule", "Buat rule untuk mengizinkan atau memblokir traffic antar CIDR / site.")
 		} else {
 			<div class="overflow-x-auto pb-1" tabindex="0" aria-label="Tabel dapat digeser horizontal">
 				<table class="min-w-full text-sm">
 					<thead class="bg-[#E9ECEF]">
 						<tr>
-							@th("Nama")
+							@th("Name")
 							@th("Source")
 							@th("Destination")
-							@th("Protokol")
+							@th("Protocol")
 							@th("Status")
-							@th("Aksi")
+							@th("Actions")
 						</tr>
 					</thead>
 					<tbody>
@@ -602,8 +602,8 @@ templ PoliciesTable(t PolicyTable) {
 								</td>
 								<td class="px-3 py-3">
 									@rowActions("policy-menu-"+itoa(p.ID), p.Name) {
-										<button type="button" role="menuitem" hx-get={ idURL("/kebijakan", p.ID, "/ubah") } hx-target="#modal">Ubah</button>
-										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/kebijakan", p.ID, "/hapus") } hx-target="#modal">Hapus</button>
+										<button type="button" role="menuitem" hx-get={ idURL("/kebijakan", p.ID, "/ubah") } hx-target="#modal">Edit</button>
+										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/kebijakan", p.ID, "/hapus") } hx-target="#modal">Delete</button>
 									}
 								</td>
 							</tr>
@@ -616,7 +616,7 @@ templ PoliciesTable(t PolicyTable) {
 }
 
 templ PolicyForm(f Form) {
-	@Modal(ternary(f.Edit(), "Ubah Firewall Rule", "Buat Firewall Rule")) {
+	@Modal(ternary(f.Edit(), "Edit Firewall Rule", "Create Firewall Rule")) {
 		<form
 			if f.Edit() {
 				hx-put={ idURL("/kebijakan", f.ID, "") }
@@ -627,10 +627,10 @@ templ PolicyForm(f Form) {
 			class="space-y-4"
 		>
 			@ErrorBox(f.Err)
-			@field("Nama rule", "name", f.V("name"), "text", f.E("name"), "", true)
+			@field("Rule Name", "name", f.V("name"), "text", f.E("name"), "", true)
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<label class="block text-sm font-semibold">
-					Aksi
+					Action
 					<select name="action" class={ inputClass(f.E("action")) }>
 						<option value="allow" selected?={ f.V("action") != "deny" }>ALLOW (Izinkan)</option>
 						<option value="deny" selected?={ f.V("action") == "deny" }>DENY (Blokir)</option>
@@ -639,25 +639,25 @@ templ PolicyForm(f Form) {
 						<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("action") }</span>
 					}
 				</label>
-				@field("Prioritas (1–10000)", "priority", ternary(f.V("priority") != "", f.V("priority"), "100"), "text", f.E("priority"), "Angka kecil dievaluasi duluan", false)
+				@field("Priority (1–10000)", "priority", ternary(f.V("priority") != "", f.V("priority"), "100"), "text", f.E("priority"), "Angka kecil dievaluasi duluan", false)
 			</div>
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<label class="block text-sm font-semibold">
-					Tipe Source
+					Source Type
 					<select name="source_type" class={ inputClass(f.E("source_type")) }>
 						<option value="cidr" selected?={ f.V("source_type") == "" || f.V("source_type") == "cidr" }>CIDR Manual</option>
 						<option value="site" selected?={ f.V("source_type") == "site" }>Multi-Site S2S</option>
 						<option value="user" selected?={ f.V("source_type") == "user" }>User C2S</option>
-						<option value="group" selected?={ f.V("source_type") == "group" }>Grup C2S</option>
+						<option value="group" selected?={ f.V("source_type") == "group" }>Group C2S</option>
 					</select>
 					if f.E("source_type") != "" {
 						<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("source_type") }</span>
 					}
 				</label>
 				<label class="block text-sm font-semibold">
-					Entitas Source (bila bukan CIDR)
+					Source Entity (bila bukan CIDR)
 					<select name="source_ref" class={ inputClass(f.E("source_ref")) }>
-						<option value="">— Pilih jika tipe Site/User/Grup —</option>
+						<option value="">— Pilih jika tipe Site/User/Group —</option>
 						for _, st := range f.Sites {
 							<option value={ itoa(st.ID) } selected?={ f.V("source_type") == "site" && f.V("source_ref") == itoa(st.ID) }>[Site] { st.Name }</option>
 						}
@@ -665,7 +665,7 @@ templ PolicyForm(f Form) {
 							<option value={ itoa(u.ID) } selected?={ f.V("source_type") == "user" && f.V("source_ref") == itoa(u.ID) }>[User] { u.Username }</option>
 						}
 						for _, g := range f.Groups {
-							<option value={ itoa(g.ID) } selected?={ f.V("source_type") == "group" && f.V("source_ref") == itoa(g.ID) }>[Grup] { g.Name }</option>
+							<option value={ itoa(g.ID) } selected?={ f.V("source_type") == "group" && f.V("source_ref") == itoa(g.ID) }>[Group] { g.Name }</option>
 						}
 					</select>
 					if f.E("source_ref") != "" {
@@ -676,7 +676,7 @@ templ PolicyForm(f Form) {
 			@field("Source CIDR", "source_cidr", f.V("source_cidr"), "text", f.E("source_cidr"), "Jaringan asal traffic, mis. 10.1.0.0/24 (LAN site lawan)", false)
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<label class="block text-sm font-semibold">
-					Tipe Destination
+					Destination Type
 					<select name="destination_type" class={ inputClass(f.E("destination_type")) }>
 						<option value="cidr" selected?={ f.V("destination_type") == "" || f.V("destination_type") == "cidr" }>CIDR Manual</option>
 						<option value="site" selected?={ f.V("destination_type") == "site" }>Multi-Site S2S</option>
@@ -687,7 +687,7 @@ templ PolicyForm(f Form) {
 					}
 				</label>
 				<label class="block text-sm font-semibold">
-					Site Tujuan (bila tipe Site)
+					Destination Site (bila tipe Site)
 					<select name="destination_ref" class={ inputClass(f.E("destination_ref")) }>
 						<option value="">— Pilih site tujuan —</option>
 						for _, st := range f.Sites {
@@ -702,7 +702,7 @@ templ PolicyForm(f Form) {
 			@field("Destination CIDR", "destination_cidr", f.V("destination_cidr"), "text", f.E("destination_cidr"), "Jaringan tujuan traffic, mis. 10.10.7.0/24 (LAN server ini). Hanya arah source → destination yang diizinkan.", false)
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<label class="block text-sm font-semibold">
-					Protokol
+					Protocol
 					<select name="protocol" class={ inputClass(f.E("protocol")) }>
 						for _, p := range []string{"all", "tcp", "udp", "icmp"} {
 							<option value={ p } selected?={ f.V("protocol") == p }>{ upper(p) }</option>
@@ -715,7 +715,7 @@ templ PolicyForm(f Form) {
 				@field("Ports (opsional, TCP/UDP)", "ports", f.V("ports"), "text", f.E("ports"), "mis. 443 atau 80,443,8000-8080", false)
 			</div>
 			@enabledBox(f.Enabled)
-			@formFooter(ternary(f.Edit(), "Simpan", "Buat"))
+			@formFooter(ternary(f.Edit(), "Save", "Create"))
 		</form>
 	}
 }

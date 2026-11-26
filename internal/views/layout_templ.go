@@ -388,7 +388,7 @@ func Layout(p Page, content templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "<span>Keluar</span></button></form></div></header><main class=\"mx-auto max-w-[1440px] px-4 py-8 sm:px-8\"><div id=\"toast\" class=\"mb-4 hidden rounded-lg border border-[#F5C2C7] bg-[#FDECEA] px-4 py-3 text-sm text-[#B3261E]\" role=\"alert\"></div><div id=\"page-content\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "<span>Logout</span></button></form></div></header><main class=\"mx-auto max-w-[1440px] px-4 py-8 sm:px-8\"><div id=\"toast\" class=\"mb-4 hidden rounded-lg border border-[#F5C2C7] bg-[#FDECEA] px-4 py-3 text-sm text-[#B3261E]\" role=\"alert\"></div><div id=\"page-content\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -502,7 +502,7 @@ func VPNTabs(active string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = tab("grup", "Grup C2S", "/grup", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = tab("grup", "C2S Groups", "/grup", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -800,7 +800,7 @@ func refreshButton(url, target, sel string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, " hx-swap=\"outerHTML\" hx-disabled-elt=\"this\" hx-indicator=\"this\" aria-label=\"Muat ulang\" title=\"Muat ulang\" class=\"refresh-btn inline-flex shrink-0 items-center gap-2 rounded-full border border-[#CED4DA] bg-white px-3 py-2 sm:px-4 text-sm font-semibold text-[#212529] hover:bg-[#F8F9FA] disabled:cursor-wait disabled:opacity-70\"><span class=\"refresh-idle inline-flex items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, " hx-swap=\"outerHTML\" hx-disabled-elt=\"this\" hx-indicator=\"this\" aria-label=\"Refresh\" title=\"Refresh\" class=\"refresh-btn inline-flex shrink-0 items-center gap-2 rounded-full border border-[#CED4DA] bg-white px-3 py-2 sm:px-4 text-sm font-semibold text-[#212529] hover:bg-[#F8F9FA] disabled:cursor-wait disabled:opacity-70\"><span class=\"refresh-idle inline-flex items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -808,7 +808,7 @@ func refreshButton(url, target, sel string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "<span class=\"hidden sm:inline\">Muat ulang</span></span> <span class=\"refresh-loading items-center gap-2\" role=\"status\"><svg class=\"h-5 w-5 shrink-0 animate-spin\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\" stroke=\"currentColor\" stroke-width=\"2.5\" opacity=\"0.25\"></circle><path d=\"M21 12a9 9 0 0 0-9-9\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\"></path></svg> <span>Memuat...</span></span></button>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "<span class=\"hidden sm:inline\">Refresh</span></span> <span class=\"refresh-loading items-center gap-2\" role=\"status\"><svg class=\"h-5 w-5 shrink-0 animate-spin\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\" stroke=\"currentColor\" stroke-width=\"2.5\" opacity=\"0.25\"></circle><path d=\"M21 12a9 9 0 0 0-9-9\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\"></path></svg> <span>Loading...</span></span></button>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1464,7 +1464,7 @@ func Login(errMsg, username string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = head("Masuk", "").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = head("Login", "").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

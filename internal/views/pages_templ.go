@@ -270,7 +270,7 @@ func OverviewPage(o Overview) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<div class=\"mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm\"><a href=\"/akun\" class=\"font-semibold text-[#1A73E8]\">Kelola Client-to-Site (C2S) →</a></div></section></div><section class=\"mt-6 rounded-xl border border-[#DEE2E6]\"><h2 class=\"border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold\">Info gateway</h2>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<div class=\"mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm\"><a href=\"/akun\" class=\"font-semibold text-[#1A73E8]\">Kelola Client-to-Site (C2S) →</a></div></section></div><section class=\"mt-6 rounded-xl border border-[#DEE2E6]\"><h2 class=\"border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold\">Gateway Info</h2>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -511,7 +511,7 @@ func AuditTable(a Audit) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = SearchBox("/audit/tabel", "#audit-table", a.Query, "Cari audit…").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = SearchBox("/audit/tabel", "#audit-table", a.Query, "Search audit…").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -431,7 +431,7 @@ func TestPagesRenderAndEscape(t *testing.T) {
 	checks := map[string][]string{
 		"/ringkasan": {"Dashboard", "Site-to-Site (S2S)", "Client-to-Site (C2S)", "Static Routing", "strongSwan swanctl"},
 		"/sites":     {"site-jkt", "203.0.113.5", "192.168.50.0/24", "Online", "2026-11-26T10:00:00Z", "Detail Site", "Manual Configuration (.conf)", "strongSwan (.conf)", "Root CA (.crt)", "Disconnect"},
-		"/akun":      {"poc-client", "Enabled", "Disabled", "Online", "Offline", "10.250.0.4", "Split", "Detail Akun", "/unduh/akun/3/manual.conf", "/unduh/akun/3/profil.json", "/unduh/akun/3/vpnaas-ca.crt"},
+		"/akun":      {"poc-client", "Enabled", "Disabled", "Online", "Offline", "10.250.0.4", "Split", "Detail Account", "/unduh/akun/3/manual.conf", "/unduh/akun/3/profil.json", "/unduh/akun/3/vpnaas-ca.crt"},
 		"/kebijakan": {"lan", "10.250.0.0/24", "TCP"},
 		"/status":    {"ESTABLISHED", "strongSwan swanctl", "pool-3"},
 		"/audit":     {"Audit Log", "2026-11-13 20:15:11", "delete", "resource_id"},
@@ -728,7 +728,7 @@ func TestUserKebabMenu(t *testing.T) {
 	e := setup(t)
 	e.login()
 	_, body := e.do("GET", "/akun", nil, nil)
-	for _, want := range []string{`data-row-actions`, `aria-haspopup="menu"`, `aria-expanded="false"`, `role="menu"`, `role="menuitem"`, `popover="manual"`, `class="kebab-button"`, "Hapus"} {
+	for _, want := range []string{`data-row-actions`, `aria-haspopup="menu"`, `aria-expanded="false"`, `role="menu"`, `role="menuitem"`, `popover="manual"`, `class="kebab-button"`, "Delete"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

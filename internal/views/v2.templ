@@ -5,7 +5,7 @@ import "vpnaas/ui-goth/internal/model"
 // ---------- Site-to-Site S2S (/sites) ----------
 
 templ SitesPage(t SiteTable) {
-	@PageHeader("Site-to-Site (S2S)", "Tambahkan Site-A satu per satu hingga Site-N via IPsec/IKEv2 (FIPS). Saat menambah site baru, pilih site yang sudah ada beserta subnet di belakangnya yang ingin dihubungkan.", PrimaryButton("Tambah Site", "/sites/baru"))
+	@PageHeader("Site-to-Site (S2S)", "Tambahkan Site-A satu per satu hingga Site-N via IPsec/IKEv2 (FIPS). Saat menambah site baru, pilih site yang sudah ada beserta subnet di belakangnya yang ingin dihubungkan.", PrimaryButton("Add Site", "/sites/baru"))
 	@VPNTabs("sites")
 	<details class="mb-4 rounded-lg border border-[#DEE2E6] bg-[#F8F9FA] px-4 py-2 text-sm text-[#495057]" data-s2s-info>
 		<summary class="cursor-pointer select-none font-semibold text-[#2F6BC4]">Panduan koneksi bertahap Site-A → Site-N &amp; NAT di belakang site</summary>
@@ -21,23 +21,23 @@ templ SitesPage(t SiteTable) {
 
 templ SitesTable(t SiteTable) {
 	<section id="sites-table" class="rounded-xl border border-[#DEE2E6]" hx-get="/sites/tabel" hx-trigger="every 30s, vpnaas:changed from:body" hx-swap="outerHTML" hx-include="this" hx-disinherit="*">
-		@tableHead(len(t.Rows), t.Total, "/sites/tabel", "#sites-table", t.Query, "Cari site / subnet / IKE ID…")
+		@tableHead(len(t.Rows), t.Total, "/sites/tabel", "#sites-table", t.Query, "Search site / subnet / IKE ID…")
 		<div class="px-5 pt-4 empty:hidden">
 			@FlashBox(t.Flash)
 			@ErrorBox(t.Err)
 		</div>
 		if len(t.Rows) == 0 {
-			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada Site S2S", "Klik Tambah Site untuk membuat endpoint Site-A pertama Anda.")
+			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada Site S2S", "Klik Add Site untuk membuat endpoint Site-A pertama Anda.")
 		} else {
 			<div class="overflow-x-auto pb-1" tabindex="0">
 				<table class="min-w-full text-sm">
 					<thead class="bg-[#E9ECEF]">
 						<tr>
 							@th("Site & Auth")
-							@th("Jaringan di Belakang Site")
-							@th("Peering & Akses (Remote TS)")
+							@th("Site Subnets")
+							@th("Peering & Remote TS")
 							@th("Status & Last Connect")
-							@th("Aksi")
+							@th("Actions")
 						</tr>
 					</thead>
 					<tbody>
@@ -77,7 +77,7 @@ templ SitesTable(t SiteTable) {
 											<span class="rounded-full bg-[#E8EEF9] px-2.5 py-0.5 text-xs font-semibold text-[#2F6BC4]">⇄ { pn }</span>
 										}
 										if !s.AllowVPCOn() && len(s.PeerSites) == 0 {
-											<span class="text-[#6C757D]">Terisolasi (default-deny)</span>
+											<span class="text-[#6C757D]">Isolated (default-deny)</span>
 										}
 									</div>
 									if len(s.HubTSList()) > 0 {
@@ -101,7 +101,7 @@ templ SitesTable(t SiteTable) {
 										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "swanctl")) } download>strongSwan (.conf)</a>
 										<a role="menuitem" href="/unduh/pki/ca.crt" download>Root CA (.crt)</a>
 										<button type="button" role="menuitem" hx-get={ idURL("/sites", s.ID, "/disconnect") } hx-target="#modal">Disconnect</button>
-										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/sites", s.ID, "/hapus") } hx-target="#modal">Hapus</button>
+										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/sites", s.ID, "/hapus") } hx-target="#modal">Delete</button>
 									}
 								</td>
 							</tr>
@@ -114,7 +114,7 @@ templ SitesTable(t SiteTable) {
 }
 
 templ SiteForm(f Form) {
-	@ModalWide(ternary(f.Edit(), "Ubah Site S2S", "Tambah Site S2S")) {
+	@ModalWide(ternary(f.Edit(), "Edit Site S2S", "Add Site S2S")) {
 		<form
 			if f.Edit() {
 				hx-put={ idURL("/sites", f.ID, "") }
@@ -126,30 +126,30 @@ templ SiteForm(f Form) {
 		>
 			@ErrorBox(f.Err)
 			if !f.Edit() && len(f.OtherSites()) == 0 {
-				<p class="rounded-md bg-[#E8EEF9] px-3 py-2 text-xs text-[#2C3E87]">Site pertama (Site-A): buat endpoint hub untuk Site-A terlebih dahulu, lalu unduh konfigurasi dari menu Configure. Setelah Site-A ada, penambahan Site-B..N dapat memilih site yang ingin dihubungkan.</p>
+				<p class="rounded-md bg-[#E8EEF9] px-3 py-2 text-xs text-[#2C3E87]">Site pertama (Site-A): buat endpoint hub untuk Site-A terlebih dahulu, lalu unduh konfigurasi dari menu Detail Site. Setelah Site-A ada, penambahan Site-B..N dapat memilih site yang ingin dihubungkan.</p>
 			}
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-				@textInput("Nama Site", "name", f.V("name"), "mis. site-jakarta", f.E("name"), "Unik: huruf, angka, _ @ . : -", true)
-				@textInput("Alamat Publik (opsional)", "address", f.V("address"), "IPv4/hostname, kosongkan jika NAT (%any)", f.E("address"), "Kosong = %any (spoke memulai koneksi)", false)
+				@textInput("Site Name", "name", f.V("name"), "mis. site-jakarta", f.E("name"), "Unik: huruf, angka, _ @ . : -", true)
+				@textInput("Public Address (opsional)", "address", f.V("address"), "IPv4/hostname, kosongkan jika NAT (%any)", f.E("address"), "Kosong = %any (spoke memulai koneksi)", false)
 				@textInput("IKE ID (opsional)", "ike_id", f.V("ike_id"), "otomatis (<nama>@vpnaas)", f.E("ike_id"), "", false)
 				@field("PSK (opsional bila Auth PSK)", "psk", "", "password", f.E("psk"), ternary(f.Edit(), "Kosongkan = tidak diubah", "Kosongkan = generate otomatis (min. 16 char)"), false)
 			</div>
-			@cidrListMax("Subnet LAN Site", "subnets", f.V("subnets"), "192.168.10.0/24\n192.168.11.0/24", f.E("subnets"), "1–16 CIDR IPv4 di belakang site ini (satu per baris atau koma).", true, 16)
+			@cidrListMax("Site LAN Subnets", "subnets", f.V("subnets"), "192.168.10.0/24\n192.168.11.0/24", f.E("subnets"), "1–16 CIDR IPv4 di belakang site ini (satu per baris atau koma).", true, 16)
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<fieldset class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
-					<legend class="px-1 text-sm font-semibold">Konektivitas &amp; Peering (Routing/Firewall)</legend>
+					<legend class="px-1 text-sm font-semibold">Connectivity &amp; Peering (Routing / Firewall)</legend>
 					<div>
 						<input type="hidden" name="allow_vpc" value="0"/>
 						<label class="flex items-center gap-2 text-sm font-semibold">
 							<input type="checkbox" name="allow_vpc" value="on" checked?={ f.V("allow_vpc") != "" } class="h-4 w-4 accent-[#2F6BC4]"/>
-							Izinkan akses ke VPC / LAN Server
+							Allow VPC / LAN Server Access
 						</label>
 					</div>
 					<div>
 						<input type="hidden" name="nat" value="0"/>
 						<label class="flex items-center gap-2 text-sm font-semibold">
 							<input type="checkbox" name="nat" value="on" checked?={ f.V("nat") != "" } class="h-4 w-4 accent-[#2F6BC4]"/>
-							NAT / masquerade di sisi site
+							NAT / Masquerade di sisi site
 						</label>
 					</div>
 					<div>
@@ -160,7 +160,7 @@ templ SiteForm(f Form) {
 						</label>
 					</div>
 					<div class="mt-2">
-						<div class="text-xs font-semibold text-[#212529]">Pilih Site Tujuan yang Boleh Terhubung (Peer Sites — default-deny):</div>
+						<div class="text-xs font-semibold text-[#212529]">Peer Sites (pilih site yang boleh saling terhubung — default-deny):</div>
 						if len(f.OtherSites()) == 0 {
 							<p class="mt-1 text-xs text-[#6C757D]">Belum ada site lain. Setelah site kedua ditambahkan, daftar site &amp; subnet di belakangnya akan tampil di sini.</p>
 						} else {
@@ -178,19 +178,19 @@ templ SiteForm(f Form) {
 					</div>
 				</fieldset>
 				<fieldset class="space-y-3 rounded-lg border border-[#DEE2E6] p-3">
-					<legend class="px-1 text-sm font-semibold">Autentikasi &amp; Crypto IKEv2 (FIPS)</legend>
+					<legend class="px-1 text-sm font-semibold">Auth &amp; Crypto IKEv2 (FIPS)</legend>
 					<label class="block text-sm font-semibold">
-						Metode Auth
+						Auth Method
 						<select name="auth_method" class={ inputClass(f.E("auth_method")) }>
 							<option value="psk" selected?={ f.V("auth_method") != "pubkey" }>Pre-Shared Key (PSK)</option>
-							<option value="pubkey" selected?={ f.V("auth_method") == "pubkey" }>Sertifikat X.509 (Pubkey)</option>
+							<option value="pubkey" selected?={ f.V("auth_method") == "pubkey" }>X.509 Certificate (Pubkey)</option>
 						</select>
 						if f.E("auth_method") != "" {
 							<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("auth_method") }</span>
 						}
 					</label>
 					<label class="block text-xs font-semibold text-[#495057]">
-						Sertifikat Site (bila Auth X.509)
+						Site Certificate (bila Auth X.509)
 						if hasCertType(f.Certs, "site") {
 							<select name="cert_id" class={ inputClass(f.E("cert_id")) }>
 								<option value="">— Pilih sertifikat site —</option>
@@ -201,7 +201,7 @@ templ SiteForm(f Form) {
 								}
 							</select>
 						} else {
-							<span class="mt-1 block text-xs font-normal text-[#6C757D]">Belum ada sertifikat aktif bertipe site. Terbitkan di tab PKI jika ingin memakai auth X.509.</span>
+							<span class="mt-1 block text-xs font-normal text-[#6C757D]">Belum ada sertifikat aktif bertipe site. Issue di tab PKI jika ingin memakai auth X.509.</span>
 						}
 						if f.E("cert_id") != "" {
 							<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("cert_id") }</span>
@@ -228,7 +228,7 @@ templ SiteForm(f Form) {
 				</fieldset>
 			</div>
 			@enabledBox(f.Enabled)
-			@formFooter(ternary(f.Edit(), "Simpan Site", "Tambah Site"))
+			@formFooter(ternary(f.Edit(), "Save Site", "Add Site"))
 		</form>
 	}
 }
@@ -245,39 +245,39 @@ templ SiteConfigureModal(d SiteConfigureData) {
 						@Badge(d.Site.AuthLabel())
 						@Badge("FIPS IKEv2")
 					</div>
-					<button type="button" hx-get={ idURL("/sites", d.Site.ID, "/ubah") } hx-target="#modal" class="rounded-full bg-[#2F6BC4] px-4 py-2 text-xs font-semibold text-white hover:bg-[#2559A8]">Ubah &amp; Atur Peering</button>
+					<button type="button" hx-get={ idURL("/sites", d.Site.ID, "/ubah") } hx-target="#modal" class="rounded-full bg-[#2F6BC4] px-4 py-2 text-xs font-semibold text-white hover:bg-[#2559A8]">Edit &amp; Peering</button>
 				</div>
 				<div class="rounded-lg bg-[#F8F9FA] p-4 font-mono text-xs space-y-1">
 					<div><strong>Hub Public IP (Remote GW):</strong> { ternary(d.HubPublicIP != "", d.HubPublicIP, "—") } · UDP 500 &amp; 4500 (NAT-T)</div>
 					<div><strong>Remote ID (Hub):</strong> { ternary(d.HubPublicIP != "", d.HubPublicIP, "—") } · <strong>Local ID (Site):</strong> { d.Site.IKEID }</div>
 					<div><strong>Phase 1 (IKEv2):</strong> { ternary(d.Site.IKEProposals != "", d.Site.IKEProposals, "aes256-sha256-modp2048") } · DPD { itoa(d.Site.DPDDelay) }s</div>
 					<div><strong>Phase 2 (ESP):</strong> { ternary(d.Site.ESPProposals != "", d.Site.ESPProposals, "aes256-sha256") } · Tunnel Mode · MSS 1300</div>
-					<div><strong>Subnet Lokal Site:</strong> { model.Join(d.Site.EffectiveSubnetList()) } · <strong>NAT Spoke:</strong> { ternary(d.Site.NATOn(), "aktif", "nonaktif") }</div>
-					<div><strong>Subnet Remote via Hub:</strong> { string(d.Site.HubLocalTS) }</div>
+					<div><strong>Local Subnets:</strong> { model.Join(d.Site.EffectiveSubnetList()) } · <strong>Spoke NAT:</strong> { ternary(d.Site.NATOn(), "on", "off") }</div>
+					<div><strong>Remote Subnets (via Hub):</strong> { string(d.Site.HubLocalTS) }</div>
 					<div><strong>Last Connect:</strong> { d.Site.LastConnectDisplay() }</div>
 					if len(d.PeerNames) > 0 {
-						<div><strong>Terhubung ke Site:</strong> { model.Join(d.PeerNames) }</div>
+						<div><strong>Peer Sites:</strong> { model.Join(d.PeerNames) }</div>
 					}
 					if d.Cert != nil {
-						<div><strong>Sertifikat Site:</strong> { d.Cert.Name } (SAN: { d.Cert.SAN } · Serial #{ d.Cert.Serial })</div>
+						<div><strong>Site Certificate:</strong> { d.Cert.Name } (SAN: { d.Cert.SAN } · Serial #{ d.Cert.Serial })</div>
 					}
 				</div>
 				<div>
-					<div class="mb-2 text-xs font-semibold text-[#495057]">Unduh File Konfigurasi Sisi Perangkat (Berisi Parameter Lengkap + Kredensial)</div>
+					<div class="mb-2 text-xs font-semibold text-[#495057]">Download Device Config (Parameter Lengkap + Kredensial)</div>
 					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "generic")) } download class="rounded-lg bg-[#2F6BC4] px-3 py-2.5 text-center font-semibold text-white hover:bg-[#2559A8]">Manual Configuration (.conf)</a>
 						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "swanctl")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">strongSwan (.conf)</a>
 					</div>
 				</div>
 				<div class="rounded-lg border border-[#DEE2E6] p-3">
-					<div class="mb-2 text-xs font-semibold text-[#495057]">Sertifikat X.509 (Root CA &amp; Sertifikat Site)</div>
+					<div class="mb-2 text-xs font-semibold text-[#495057]">X.509 Certificates (Root CA &amp; Site Cert)</div>
 					<div class="flex flex-wrap gap-2">
 						<a href="/unduh/pki/ca.crt" download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Root CA (.crt)</a>
 						<a href="/unduh/pki/ca.pem" download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Root CA (.pem)</a>
 						if d.Site.CertID != nil {
 							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.Site.CertID) + "/cert.crt") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Site Cert (.crt)</a>
 							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.Site.CertID) + "/key.key") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Private Key (.key)</a>
-							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.Site.CertID) + "/bundle.p12") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Bundle PKCS#12 (.p12)</a>
+							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.Site.CertID) + "/bundle.p12") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Cert + Key Bundle (.p12)</a>
 						}
 					</div>
 				</div>
@@ -287,38 +287,38 @@ templ SiteConfigureModal(d SiteConfigureData) {
 			</div>
 		}
 		<div class="mt-5 flex justify-end border-t border-[#DEE2E6] pt-4">
-			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Tutup</button>
+			<button type="button" data-modal-close class="rounded-full border border-[#CED4DA] px-5 py-2 text-sm font-semibold hover:bg-[#F8F9FA]">Close</button>
 		</div>
 	}
 }
 
-// ---------- Grup C2S (/grup) ----------
+// ---------- C2S Groups (/grup) ----------
 
 templ GroupsPage(t GroupTable) {
-	@PageHeader("Grup Client-to-Site", "Kelompokkan user remote access agar izin VPC dan Multi-Site dapat dikelola sekaligus.", PrimaryButton("Buat Grup", "/grup/baru"))
+	@PageHeader("C2S Groups", "Kelompokkan user remote access agar izin VPC dan Multi-Site dapat dikelola sekaligus.", PrimaryButton("Create Group", "/grup/baru"))
 	@VPNTabs("grup")
 	@GroupsTable(t)
 }
 
 templ GroupsTable(t GroupTable) {
 	<section id="groups-table" class="rounded-xl border border-[#DEE2E6]" hx-get="/grup/tabel" hx-trigger="vpnaas:changed from:body" hx-swap="outerHTML" hx-include="this" hx-disinherit="*">
-		@tableHead(len(t.Rows), t.Total, "/grup/tabel", "#groups-table", t.Query, "Cari grup…")
+		@tableHead(len(t.Rows), t.Total, "/grup/tabel", "#groups-table", t.Query, "Search group…")
 		<div class="px-5 pt-4 empty:hidden">
 			@FlashBox(t.Flash)
 			@ErrorBox(t.Err)
 		</div>
 		if len(t.Rows) == 0 {
-			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada grup C2S", "Buat grup untuk mengelompokkan akses VPC & Multi-Site bagi beberapa akun C2S.")
+			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada C2S group", "Buat group untuk mengelompokkan akses VPC & Multi-Site bagi beberapa akun C2S.")
 		} else {
 			<div class="overflow-x-auto pb-1">
 				<table class="min-w-full text-sm">
 					<thead class="bg-[#E9ECEF]">
 						<tr>
-							@th("Nama Grup")
+							@th("Group Name")
 							@th("Allowed CIDRs")
 							@th("Allowed Sites")
 							@th("Status")
-							@th("Aksi")
+							@th("Actions")
 						</tr>
 					</thead>
 					<tbody>
@@ -335,8 +335,8 @@ templ GroupsTable(t GroupTable) {
 								<td class="px-3 py-3">@Badge(g.AdminLabel())</td>
 								<td class="px-3 py-3">
 									@rowActions("group-menu-"+itoa(g.ID), g.Name) {
-										<button type="button" role="menuitem" hx-get={ idURL("/grup", g.ID, "/ubah") } hx-target="#modal">Ubah</button>
-										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/grup", g.ID, "/hapus") } hx-target="#modal">Hapus</button>
+										<button type="button" role="menuitem" hx-get={ idURL("/grup", g.ID, "/ubah") } hx-target="#modal">Edit</button>
+										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/grup", g.ID, "/hapus") } hx-target="#modal">Delete</button>
 									}
 								</td>
 							</tr>
@@ -349,7 +349,7 @@ templ GroupsTable(t GroupTable) {
 }
 
 templ GroupForm(f Form) {
-	@Modal(ternary(f.Edit(), "Ubah Grup C2S", "Buat Grup C2S")) {
+	@Modal(ternary(f.Edit(), "Edit Group", "Create Group")) {
 		<form
 			if f.Edit() {
 				hx-put={ idURL("/grup", f.ID, "") }
@@ -360,8 +360,8 @@ templ GroupForm(f Form) {
 			class="space-y-4"
 		>
 			@ErrorBox(f.Err)
-			@field("Nama Grup", "name", f.V("name"), "text", f.E("name"), "mis. devops, finance", true)
-			@field("Deskripsi (opsional)", "description", f.V("description"), "text", f.E("description"), "", false)
+			@field("Group Name", "name", f.V("name"), "text", f.E("name"), "mis. devops, finance", true)
+			@field("Description (opsional)", "description", f.V("description"), "text", f.E("description"), "", false)
 			@cidrListMax("Allowed CIDRs (VPC / LAN)", "allowed_cidrs", f.V("allowed_cidrs"), "10.10.7.0/24", f.E("allowed_cidrs"), "Satu CIDR per baris atau koma (opsional, maks. 16).", false, 16)
 			if len(f.Sites) > 0 {
 				<fieldset class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
@@ -376,7 +376,7 @@ templ GroupForm(f Form) {
 				</fieldset>
 			}
 			@enabledBox(f.Enabled)
-			@formFooter(ternary(f.Edit(), "Simpan", "Buat"))
+			@formFooter(ternary(f.Edit(), "Save", "Create"))
 		</form>
 	}
 }
@@ -384,14 +384,14 @@ templ GroupForm(f Form) {
 // ---------- Static Routing (/routing) ----------
 
 templ RoutesPage(t RouteTable) {
-	@PageHeader("Static Routing", "Kelola static route Linux milik VPNaaS (proto 188) secara terisolasi tanpa mengganggu route sistem/OpenStack.", PrimaryButton("Tambah Route", "/routing/baru"))
+	@PageHeader("Static Routing", "Kelola static route Linux milik VPNaaS (proto 188) secara terisolasi tanpa mengganggu route sistem/OpenStack.", PrimaryButton("Add Route", "/routing/baru"))
 	@VPNTabs("routing")
 	@RoutesTable(t)
 }
 
 templ RoutesTable(t RouteTable) {
 	<section id="routes-table" class="rounded-xl border border-[#DEE2E6]" hx-get="/routing/tabel" hx-trigger="vpnaas:changed from:body" hx-swap="outerHTML" hx-include="this" hx-disinherit="*">
-		@tableHead(len(t.Rows), t.Total, "/routing/tabel", "#routes-table", t.Query, "Cari route / CIDR…")
+		@tableHead(len(t.Rows), t.Total, "/routing/tabel", "#routes-table", t.Query, "Search route / CIDR…")
 		<div class="px-5 pt-4 empty:hidden">
 			@FlashBox(t.Flash)
 			@ErrorBox(t.Err)
@@ -403,12 +403,12 @@ templ RoutesTable(t RouteTable) {
 				<table class="min-w-full text-sm">
 					<thead class="bg-[#E9ECEF]">
 						<tr>
-							@th("Nama")
+							@th("Name")
 							@th("Destination CIDR")
 							@th("Next Hop / Interface / Site")
 							@th("Metric")
-							@th("Sinkronisasi")
-							@th("Aksi")
+							@th("Sync Status")
+							@th("Actions")
 						</tr>
 					</thead>
 					<tbody>
@@ -433,8 +433,8 @@ templ RoutesTable(t RouteTable) {
 								</td>
 								<td class="px-3 py-3">
 									@rowActions("route-menu-"+itoa(r.ID), r.Name) {
-										<button type="button" role="menuitem" hx-get={ idURL("/routing", r.ID, "/ubah") } hx-target="#modal">Ubah</button>
-										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/routing", r.ID, "/hapus") } hx-target="#modal">Hapus</button>
+										<button type="button" role="menuitem" hx-get={ idURL("/routing", r.ID, "/ubah") } hx-target="#modal">Edit</button>
+										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/routing", r.ID, "/hapus") } hx-target="#modal">Delete</button>
 									}
 								</td>
 							</tr>
@@ -445,7 +445,7 @@ templ RoutesTable(t RouteTable) {
 		}
 		if t.KernelOK && len(t.KernelRoutes) > 0 {
 			<details class="border-t border-[#DEE2E6] bg-[#F8F9FA] px-5 py-3 text-xs text-[#495057]">
-				<summary class="cursor-pointer select-none font-semibold text-[#2F6BC4]">Tabel Route Kernel Aktif ({ itoa(len(t.KernelRoutes)) } entri di table main)</summary>
+				<summary class="cursor-pointer select-none font-semibold text-[#2F6BC4]">Active Kernel Routing Table ({ itoa(len(t.KernelRoutes)) } entries in table main)</summary>
 				<pre class="mt-2 max-h-48 overflow-auto rounded-lg border border-[#DEE2E6] bg-white p-3 font-mono text-xs leading-relaxed">
 					for _, kr := range t.KernelRoutes {
 						{ formatKernelRoute(kr) + "\n" }
@@ -457,7 +457,7 @@ templ RoutesTable(t RouteTable) {
 }
 
 templ RouteForm(f Form) {
-	@Modal(ternary(f.Edit(), "Ubah Static Route", "Tambah Static Route")) {
+	@Modal(ternary(f.Edit(), "Edit Static Route", "Add Static Route")) {
 		<form
 			if f.Edit() {
 				hx-put={ idURL("/routing", f.ID, "") }
@@ -468,13 +468,13 @@ templ RouteForm(f Form) {
 			class="space-y-4"
 		>
 			@ErrorBox(f.Err)
-			@field("Nama Route", "name", f.V("name"), "text", f.E("name"), "mis. to-db-subnet", true)
+			@field("Route Name", "name", f.V("name"), "text", f.E("name"), "mis. to-db-subnet", true)
 			@field("Destination CIDR", "destination_cidr", f.V("destination_cidr"), "text", f.E("destination_cidr"), "mis. 10.120.0.0/24 (tanpa /0)", true)
 			@field("Gateway IPv4 (opsional)", "gateway", f.V("gateway"), "text", f.E("gateway"), "mis. 10.10.7.1 — kosongkan untuk menghapus gateway", false)
 			@field("Interface (opsional)", "interface", f.V("interface"), "text", f.E("interface"), "mis. ens8 — kosongkan untuk menghapus interface", false)
 			if len(f.Sites) > 0 {
 				<label class="block text-sm font-semibold">
-					Site Tujuan (opsional — jika subnet berada di belakang site S2S)
+					Target Site (opsional — jika subnet di belakang site S2S)
 					<select name="site_id" class={ inputClass(f.E("site_id")) }>
 						<option value="">— Tanpa site (route lokal Linux) —</option>
 						for _, st := range f.Sites {
@@ -487,9 +487,9 @@ templ RouteForm(f Form) {
 				</label>
 			}
 			@field("Metric", "metric", ternary(f.V("metric") != "", f.V("metric"), "100"), "text", f.E("metric"), "1–65535 (default 100)", false)
-			@field("Deskripsi (opsional)", "description", f.V("description"), "text", f.E("description"), "Catatan tujuan route", false)
+			@field("Description (opsional)", "description", f.V("description"), "text", f.E("description"), "Catatan tujuan route", false)
 			@enabledBox(f.Enabled)
-			@formFooter(ternary(f.Edit(), "Simpan", "Tambah"))
+			@formFooter(ternary(f.Edit(), "Save", "Add"))
 		</form>
 	}
 }
@@ -497,7 +497,7 @@ templ RouteForm(f Form) {
 // ---------- PKI & Sertifikat (/pki) ----------
 
 templ PKIPage(d PKIPageData) {
-	@PageHeader("PKI & Sertifikat X.509", "Kelola Certificate Authority (CA), rotasi sertifikat server, penerbitan sertifikat client/site, PKCS#12, dan CRL.", PrimaryButton("Terbitkan Sertifikat", "/pki/baru"))
+	@PageHeader("PKI & Sertifikat X.509", "Kelola Certificate Authority (CA), rotasi server cert, penerbitan client/site cert, PKCS#12, dan CRL.", PrimaryButton("Issue Certificate", "/pki/baru"))
 	@VPNTabs("pki")
 	@PKIContent(d)
 }
@@ -514,7 +514,7 @@ templ PKIContent(d PKIPageData) {
 				</div>
 				<div class="font-mono text-xs text-[#495057] space-y-1">
 					<div>Subject: { mapStr(d.CA, "subject") }</div>
-					<div>Berlaku hingga: { mapStr(d.CA, "not_after") } ({ mapStr(d.CA, "days_remaining") } hari)</div>
+					<div>Valid until: { mapStr(d.CA, "not_after") } ({ mapStr(d.CA, "days_remaining") } days)</div>
 					<div class="break-words">SHA-256: { mapStr(d.CA, "sha256_fingerprint") }</div>
 				</div>
 				<div class="mt-2 flex flex-wrap gap-2">
@@ -525,33 +525,33 @@ templ PKIContent(d PKIPageData) {
 			</section>
 			<section class="rounded-xl border border-[#DEE2E6] p-5 space-y-2 text-sm">
 				<div class="flex items-center justify-between">
-					<h2 class="font-bold text-base">Sertifikat Server IKEv2</h2>
+					<h2 class="font-bold text-base">IKEv2 Server Certificate</h2>
 					@Badge(ternary(mapBool(d.Server, "present"), "Active", "Unknown"))
 				</div>
 				<div class="font-mono text-xs text-[#495057] space-y-1">
 					<div>Subject: { mapStr(d.Server, "subject") }</div>
 					<div>SAN IP: { mapStr(d.Server, "san_ips") } · DNS: { mapStr(d.Server, "san_dns") }</div>
-					<div>Berlaku hingga: { mapStr(d.Server, "not_after") } ({ mapStr(d.Server, "days_remaining") } hari)</div>
+					<div>Valid until: { mapStr(d.Server, "not_after") } ({ mapStr(d.Server, "days_remaining") } days)</div>
 				</div>
 				<div class="mt-2">
-					<button type="button" hx-post="/pki/server/rotate" hx-confirm="Rotasi sertifikat server IKEv2 sekarang? Sertifikat baru akan ditandatangani oleh CA yang sama." hx-target="#pki-content" hx-swap="outerHTML" class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Rotasi Sertifikat Server</button>
+					<button type="button" hx-post="/pki/server/rotate" hx-confirm="Rotasi sertifikat server IKEv2 sekarang? Sertifikat baru akan ditandatangani oleh CA yang sama." hx-target="#pki-content" hx-swap="outerHTML" class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Rotate Server Cert</button>
 				</div>
 			</section>
 		</div>
 		<section class="rounded-xl border border-[#DEE2E6]">
-			<div class="border-b border-[#DEE2E6] px-5 py-4 font-semibold">Sertifikat Client & Site ({ itoa(len(d.Certs)) })</div>
+			<div class="border-b border-[#DEE2E6] px-5 py-4 font-semibold">Client &amp; Site Certificates ({ itoa(len(d.Certs)) })</div>
 			if len(d.Certs) == 0 {
-				@Empty("Belum ada sertifikat diterbitkan", "Klik Terbitkan Sertifikat untuk membuat sertifikat X.509 client C2S atau site S2S.")
+				@Empty("Belum ada sertifikat diterbitkan", "Klik Issue Certificate untuk membuat sertifikat X.509 client C2S atau site S2S.")
 			} else {
 				<div class="overflow-x-auto">
 					<table class="min-w-full text-sm">
 						<thead class="bg-[#E9ECEF]">
 							<tr>
-								@th("Nama & SAN")
-								@th("Tipe")
-								@th("Masa Berlaku")
+								@th("Name & SAN")
+								@th("Type")
+								@th("Validity")
 								@th("Status")
-								@th("Aksi")
+								@th("Actions")
 							</tr>
 						</thead>
 						<tbody>
@@ -568,10 +568,9 @@ templ PKIContent(d PKIPageData) {
 										@rowActions("cert-menu-"+itoa(cert.ID), cert.Name) {
 											<a role="menuitem" href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/cert.crt") } download>Download Cert (.crt)</a>
 											<a role="menuitem" href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/key.key") } download>Private Key (.key)</a>
-											<a role="menuitem" href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/bundle.p12") } download>Bundle PKCS#12 (.p12)</a>
-											<a role="menuitem" href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/bundle.json") } download>Bundle PEM (.json)</a>
+											<a role="menuitem" href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/bundle.p12") } download>Cert + Key Bundle (.p12)</a>
 											if !cert.Revoked {
-												<button type="button" role="menuitem" class="menu-danger" hx-post={ "/pki/certs/" + itoa(cert.ID) + "/revoke" } hx-confirm="Cabut sertifikat ini sekarang? CRL akan diperbarui dan sesi aktif terkait diputus." hx-target="#pki-content" hx-swap="outerHTML">Revoke</button>
+												<button type="button" role="menuitem" class="menu-danger" hx-post={ "/pki/certs/" + itoa(cert.ID) + "/revoke" } hx-confirm="Revoke sertifikat ini sekarang? CRL akan diperbarui dan sesi aktif terkait diputus." hx-target="#pki-content" hx-swap="outerHTML">Revoke</button>
 											}
 										}
 									</td>
@@ -586,28 +585,28 @@ templ PKIContent(d PKIPageData) {
 }
 
 templ CertIssueForm(f Form) {
-	@Modal("Terbitkan Sertifikat X.509") {
+	@Modal("Issue Certificate X.509") {
 		<form hx-post="/pki/certs" hx-target="#modal" class="space-y-4">
 			@ErrorBox(f.Err)
-			@field("Nama Sertifikat", "name", f.V("name"), "text", f.E("name"), "mis. alice-laptop atau site-jkt", true)
+			@field("Certificate Name", "name", f.V("name"), "text", f.E("name"), "mis. alice-laptop atau site-jkt", true)
 			@field("SAN / Identity (opsional)", "san", f.V("san"), "text", f.E("san"), "mis. alice@dcloud.id (kosong = <nama>@vpnaas)", false)
 			<label class="block text-sm font-semibold">
-				Tipe Target
+				Target Type
 				<select name="target_type" class={ inputClass(f.E("target_type")) }>
 					<option value="user" selected?={ f.V("target_type") != "site" }>Client C2S (clientAuth)</option>
 					<option value="site" selected?={ f.V("target_type") == "site" }>Gateway Site S2S (clientAuth + serverAuth)</option>
 				</select>
 			</label>
 			<div class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
-				<div class="text-sm font-semibold text-[#212529]">Masa Berlaku Sertifikat</div>
+				<div class="text-sm font-semibold text-[#212529]">Validity Period</div>
 				<input type="hidden" name="no_expiration" value="0"/>
 				<label class="flex items-center gap-2 text-sm font-semibold">
 					<input type="checkbox" name="no_expiration" value="on" checked?={ f.V("no_expiration") == "on" } class="h-4 w-4 accent-[#2F6BC4]"/>
 					<span>No Expiration (tanpa masa kedaluwarsa)</span>
 				</label>
-				@field("Masa Berlaku (hari)", "validity_days", ternary(f.V("validity_days") != "", f.V("validity_days"), "365"), "text", f.E("validity_days"), "1–3650 hari (diabaikan jika No Expiration dicentang)", false)
+				@field("Validity (days)", "validity_days", ternary(f.V("validity_days") != "", f.V("validity_days"), "365"), "text", f.E("validity_days"), "1–3650 hari (diabaikan jika No Expiration dicentang)", false)
 			</div>
-			@formFooter("Terbitkan")
+			@formFooter("Issue")
 		</form>
 	}
 }
@@ -700,13 +699,13 @@ templ TokenCreatedModal(name, role, token string) {
 // ---------- Enhanced Status, Diagnostics & Logs (/status) ----------
 
 templ StatusV2Page(d StatusViewData) {
-	@PageHeader("Status Runtime, Diagnostik & Log", "Readiness provisioning, metadata gateway, status strongSwan, cek jalur konektivitas, dan log layanan.", PageRefresh("/status"))
+	@PageHeader("Status & Diagnostics", "Readiness provisioning, gateway metadata, status strongSwan, cek jalur konektivitas, dan service log.", PageRefresh("/status"))
 	@ErrorBox(d.Err)
 	<div class="flex flex-col gap-6">
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 			<section class="rounded-xl border border-[#DEE2E6] p-5 space-y-2 text-sm">
 				<div class="flex items-center justify-between">
-					<h2 class="font-bold text-base">Readiness Gateway (/api/ready)</h2>
+					<h2 class="font-bold text-base">Gateway Readiness (/api/ready)</h2>
 					@Badge(ternary(mapBool(d.Ready, "ready"), "READY", "DEGRADED"))
 				</div>
 				@ErrorBox(d.ReadyErr)
@@ -722,12 +721,12 @@ templ StatusV2Page(d StatusViewData) {
 				}
 			</section>
 			<section class="rounded-xl border border-[#DEE2E6] p-5 space-y-3 text-sm">
-				<h2 class="font-bold text-base">Diagnostik Jalur Konektivitas</h2>
+				<h2 class="font-bold text-base">Connectivity Diagnostics</h2>
 				<form hx-post="/status/diagnostics" hx-target="#diag-result" hx-swap="innerHTML" class="space-y-2">
 					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 						<input type="text" name="target" placeholder="Target IP / CIDR (mis. 192.168.10.50)" required class={ inputClass("") }/>
 						<select name="source_user_id" class={ inputClass("") }>
-							<option value="">Sumber: Umum / Gateway</option>
+							<option value="">Source: General / Gateway</option>
 							for _, u := range d.Users {
 								<option value={ itoa(u.ID) }>User: { u.Username }</option>
 							}
@@ -735,12 +734,12 @@ templ StatusV2Page(d StatusViewData) {
 					</div>
 					<div class="flex items-center gap-3">
 						<select name="source_site_id" class={ inputClass("") }>
-							<option value="">Atau Sumber Site S2S…</option>
+							<option value="">Or Source Site S2S…</option>
 							for _, s := range d.Sites {
 								<option value={ itoa(s.ID) }>Site: { s.Name }</option>
 							}
 						</select>
-						<button type="submit" class="shrink-0 rounded-full bg-[#2F6BC4] px-4 py-2 text-xs font-semibold text-white hover:bg-[#2559A8]">Cek Jalur</button>
+						<button type="submit" class="shrink-0 rounded-full bg-[#2F6BC4] px-4 py-2 text-xs font-semibold text-white hover:bg-[#2559A8]">Check Path</button>
 					</div>
 				</form>
 				<div id="diag-result"></div>
@@ -748,7 +747,7 @@ templ StatusV2Page(d StatusViewData) {
 		</div>
 		<section class="rounded-xl border border-[#DEE2E6]">
 			<div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#DEE2E6] px-5 py-3">
-				<h2 class="font-semibold text-sm">Log Layanan (Teredaksi Otomatis)</h2>
+				<h2 class="font-semibold text-sm">Service Logs (Auto-Redacted)</h2>
 				<div class="flex flex-wrap gap-1.5">
 					for _, src := range []string{"strongswan", "api", "reconcile", "offload"} {
 						<button type="button" hx-get={ "/status/logs?source=" + src } hx-target="#logs-box" hx-swap="outerHTML" class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold hover:bg-[#F8F9FA]">{ src }</button>
@@ -758,7 +757,7 @@ templ StatusV2Page(d StatusViewData) {
 			@LogsBox(d.LogSource, d.LogLines, d.LogErr)
 		</section>
 		<section class="rounded-xl border border-[#DEE2E6]">
-			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Status Raw strongSwan (/api/status)</h2>
+			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Raw strongSwan Status (/api/status)</h2>
 			if d.Err != "" && len(d.Items) == 0 {
 				@Empty("Status runtime tidak tersedia", "Status: Unknown. Periksa backend API dan SSH tunnel, lalu muat ulang.")
 			} else {

@@ -78,7 +78,7 @@ func TestSessionModal(t *testing.T) {
 	e.login()
 	e.api.users[0]["sessions"].([]any)[0].(map[string]any)["remote_address"] = "<script>bad</script>"
 	_, body := e.do("GET", "/akun/3/sesi", nil, map[string]string{"HX-Request": "true"})
-	for _, want := range []string{`role="dialog"`, `aria-modal="true"`, "Detail Sesi", "poc-client", "IKE #13", "ESTABLISHED", "CHILD #7", "INSTALLED", "5 B", "6 B", "&lt;script&gt;bad&lt;/script&gt;"} {
+	for _, want := range []string{`role="dialog"`, `aria-modal="true"`, "Session Detail", "poc-client", "IKE #13", "ESTABLISHED", "CHILD #7", "INSTALLED", "5 B", "6 B", "&lt;script&gt;bad&lt;/script&gt;"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}
@@ -101,7 +101,7 @@ func TestAccountMinorUI(t *testing.T) {
 	e := setup(t)
 	e.login()
 	_, body := e.do("GET", "/akun", nil, nil)
-	for _, want := range []string{`class="flex items-center gap-3"`, "Profil VPN (.json)", `title="Profil berisi kredensial; simpan dengan aman"`, `hx-get="/akun/3/sesi"`, `hx-target="#modal"`, `/unduh/akun/3/vpnaas-ca.crt`, "Download Sertifikat (.crt)", `alt="Logo VPNaaS"`} {
+	for _, want := range []string{`class="flex items-center gap-3"`, "VPN Profile (.json)", `title="Profil berisi kredensial; simpan dengan aman"`, `hx-get="/akun/3/sesi"`, `hx-target="#modal"`, `/unduh/akun/3/vpnaas-ca.crt`, "Download Cert (.crt)", `alt="Logo VPNaaS"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}
@@ -124,7 +124,7 @@ func TestGatewayAvailabilityLabel(t *testing.T) {
 	e := setup(t)
 	e.login()
 	_, body := e.do("GET", "/ringkasan", nil, nil)
-	re := regexp.MustCompile(`(?s)Telemetri Gateway.*?</a>`)
+	re := regexp.MustCompile(`(?s)Gateway Telemetry.*?</a>`)
 	card := re.FindString(body)
 	if !strings.Contains(card, ">Active<") || strings.Contains(card, "Tersedia") {
 		t.Errorf("available gateway label: %s", card)

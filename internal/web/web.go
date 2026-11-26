@@ -414,7 +414,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, sess auth.Sess
 		{Label: "Site-to-Site (S2S)", Value: count(len(sites), errText(sierr)), Note: siteNote, Href: "/sites", Ok: sierr == nil && sUnk == 0},
 		{Label: "Client-to-Site (C2S)", Value: count(len(users), uerr), Note: userNote, Href: "/akun", Ok: uerr == "" && uUnk == 0},
 		{Label: "Static Routing", Value: count(len(routes), errText(rerr)), Note: "Static route & routing tunnel", Href: "/routing", Ok: rerr == nil},
-		{Label: "Telemetri Gateway", Value: gw, Note: "FIPS IPsec/IKEv2 · status runtime", Href: "/status", Ok: serr == ""},
+		{Label: "Gateway Telemetry", Value: gw, Note: "FIPS IPsec/IKEv2 · runtime status", Href: "/status", Ok: serr == ""},
 	}
 	for _, e := range []struct{ name, err string }{{"Ringkasan", errText(oerr)}, {"Site S2S", errText(sierr)}, {"Akun C2S", uerr}, {"Static Routing", errText(rerr)}, {"Status", serr}} {
 		if e.err != "" {
@@ -467,7 +467,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request, sess auth.Sessio
 		d.ReadyErr = ""
 		d.LogErr = ""
 	}
-	s.page(w, r, sess, "status", "Status Runtime", views.StatusV2Page(d))
+	s.page(w, r, sess, "status", "Status & Diagnostics", views.StatusV2Page(d))
 }
 
 func (s *Server) audit(w http.ResponseWriter, r *http.Request, sess auth.Session) {
@@ -810,8 +810,8 @@ func (s *Server) confirm(kind string) handler {
 			name = "ID " + strconv.Itoa(id)
 		}
 		render(w, r, views.ConfirmModal(views.Confirm{
-			Title: "Hapus " + k.label, Message: "Hapus permanen " + k.label + " berikut? Tindakan ini tidak dapat dibatalkan dan sesi aktif terkait akan diputus.",
-			Name: name, URL: k.base + "/" + strconv.Itoa(id), Button: "Hapus", Err: errText(err),
+			Title: "Delete " + k.label, Message: "Delete permanen " + k.label + " berikut? Tindakan ini tidak dapat dibatalkan dan sesi aktif terkait akan diputus.",
+			Name: name, URL: k.base + "/" + strconv.Itoa(id), Button: "Delete", Err: errText(err),
 		}))
 	}
 }
@@ -827,7 +827,7 @@ func (s *Server) remove(kind string) handler {
 		defer cancel()
 		if _, err := s.up.JSON(ctx, "DELETE", kind+"/"+strconv.Itoa(id), nil, nil); err != nil {
 			k := kindLabel[kind]
-			render(w, r, views.ConfirmModal(views.Confirm{Title: "Hapus " + k.label, Message: "Gagal menghapus.", Name: "ID " + strconv.Itoa(id), URL: k.base + "/" + strconv.Itoa(id), Button: "Hapus", Err: err.Error()}))
+			render(w, r, views.ConfirmModal(views.Confirm{Title: "Delete " + k.label, Message: "Gagal menghapus data.", Name: "ID " + strconv.Itoa(id), URL: k.base + "/" + strconv.Itoa(id), Button: "Delete", Err: err.Error()}))
 			return
 		}
 		saved(w, "Data berhasil dihapus")

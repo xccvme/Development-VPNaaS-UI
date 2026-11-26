@@ -102,7 +102,7 @@ templ Layout(p Page, content templ.Component) {
 							<input type="hidden" name="csrf_token" value={ p.CSRF }/>
 							<button type="submit" class="inline-flex items-center gap-2 rounded-full border border-[#DEE2E6] px-4 py-2 text-sm font-semibold text-[#212529] hover:bg-[#F8F9FA]">
 								@icon("logout")
-								<span>Keluar</span>
+								<span>Logout</span>
 							</button>
 						</form>
 					</div>
@@ -137,7 +137,7 @@ templ VPNTabs(active string) {
 	<div class="no-scrollbar mb-6 flex gap-6 overflow-x-auto overflow-y-hidden border-b border-[#DEE2E6] text-[15px]" role="tablist">
 		@tab("sites", "Site-to-Site (S2S)", "/sites", active)
 		@tab("akun", "Client-to-Site (C2S)", "/akun", active)
-		@tab("grup", "Grup C2S", "/grup", active)
+		@tab("grup", "C2S Groups", "/grup", active)
 		@tab("routing", "Static Routing", "/routing", active)
 		@tab("kebijakan", "Firewall Rules", "/kebijakan", active)
 		@tab("pki", "PKI", "/pki", active)
@@ -188,17 +188,17 @@ templ refreshButton(url, target, sel string) {
 		hx-swap="outerHTML"
 		hx-disabled-elt="this"
 		hx-indicator="this"
-		aria-label="Muat ulang"
-		title="Muat ulang"
+		aria-label="Refresh"
+		title="Refresh"
 		class="refresh-btn inline-flex shrink-0 items-center gap-2 rounded-full border border-[#CED4DA] bg-white px-3 py-2 sm:px-4 text-sm font-semibold text-[#212529] hover:bg-[#F8F9FA] disabled:cursor-wait disabled:opacity-70"
 	>
 		<span class="refresh-idle inline-flex items-center gap-2">
 			@icon("refresh")
-			<span class="hidden sm:inline">Muat ulang</span>
+			<span class="hidden sm:inline">Refresh</span>
 		</span>
 		<span class="refresh-loading items-center gap-2" role="status">
 			<svg class="h-5 w-5 shrink-0 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.5" opacity="0.25"></circle><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></path></svg>
-			<span>Memuat...</span>
+			<span>Loading...</span>
 		</span>
 	</button>
 }
@@ -280,7 +280,7 @@ templ rowBtn(label, method, url, target string, danger bool) {
 templ Login(errMsg, username string) {
 	<!DOCTYPE html>
 	<html lang="id">
-		@head("Masuk", "")
+		@head("Login", "")
 		<body class="grid min-h-screen place-items-center bg-gradient-to-b from-[#2C3E87] to-[#3A55A6] px-4">
 			<main class="w-full max-w-sm rounded-xl bg-white p-8 shadow-xl">
 				<div class="mb-6 flex items-center gap-3">

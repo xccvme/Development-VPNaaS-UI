@@ -19,9 +19,9 @@ func TestFirewallRulesWording(t *testing.T) {
 	for _, want := range []string{
 		"<title>Firewall Rules · VPNaaS Console</title>",
 		">Firewall Rules</h1>",
-		"Allow rule tambahan untuk traffic yang diforward antar jaringan (S2S/LAN). Default: deny. Akses user C2S tetap diatur dari Allowed CIDRs akun.",
-		">Nama</th>", ">Source</th>", ">Destination</th>", ">Protokol</th>", ">Status</th>",
-		"Buat Rule",
+		"Allow/Deny rule tambahan untuk traffic antar jaringan (S2S/LAN/C2S). Default: deny. Akses user C2S tetap diatur dari Allowed CIDRs akun.",
+		">Name</th>", ">Source</th>", ">Destination</th>", ">Protocol</th>", ">Status</th>", ">Actions</th>",
+		"Create Rule",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("/kebijakan missing %q", want)
@@ -33,7 +33,7 @@ func TestFirewallRulesWording(t *testing.T) {
 		}
 	}
 	nav := regexp.MustCompile(`(?s)<nav.*?</nav>`).FindString(body)
-	for _, want := range []string{"<span>Dashboard</span>", "<span>VPNaaS</span>", "<span>Status &amp; Diagnostik</span>", "<span>Audit Log</span>"} {
+	for _, want := range []string{"<span>Dashboard</span>", "<span>VPNaaS</span>", "<span>Status &amp; Diagnostics</span>", "<span>Audit Log</span>"} {
 		if !strings.Contains(nav, want) {
 			t.Errorf("sidebar missing %s: %s", want, nav)
 		}
@@ -45,7 +45,7 @@ func TestFirewallRulesWording(t *testing.T) {
 		t.Errorf("VPNaaS tabs missing Firewall Rules")
 	}
 	_, form := e.do("GET", "/kebijakan/baru", nil, map[string]string{"HX-Request": "true"})
-	for _, want := range []string{"Buat Firewall Rule", "Source CIDR", "Destination CIDR", `name="source_cidr"`, `name="destination_cidr"`, "Jaringan asal traffic", "Jaringan tujuan traffic"} {
+	for _, want := range []string{"Create Firewall Rule", "Source CIDR", "Destination CIDR", `name="source_cidr"`, `name="destination_cidr"`, "Jaringan asal traffic", "Jaringan tujuan traffic"} {
 		if !strings.Contains(form, want) {
 			t.Errorf("policy form missing %q", want)
 		}
@@ -99,7 +99,7 @@ func TestS2SFormSubnets(t *testing.T) {
 	e := setup(t)
 	e.login()
 	_, form := e.do("GET", "/sites/baru", nil, map[string]string{"HX-Request": "true"})
-	for _, want := range []string{"Subnet LAN Site", "IKE ID (opsional)", "PSK", "FIPS"} {
+	for _, want := range []string{"Site LAN Subnets", "IKE ID (opsional)", "PSK", "FIPS"} {
 		if !strings.Contains(form, want) {
 			t.Errorf("S2S form missing %q", want)
 		}

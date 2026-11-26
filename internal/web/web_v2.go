@@ -590,7 +590,7 @@ func (s *Server) groupsPage(w http.ResponseWriter, r *http.Request, sess auth.Se
 		render(w, r, views.GroupsTable(t))
 		return
 	}
-	s.page(w, r, sess, "grup", "Grup C2S", views.GroupsPage(t))
+	s.page(w, r, sess, "grup", "C2S Groups", views.GroupsPage(t))
 }
 
 func (s *Server) groupForm(w http.ResponseWriter, r *http.Request, _ auth.Session) {
@@ -752,7 +752,7 @@ func (s *Server) pkiPage(w http.ResponseWriter, r *http.Request, sess auth.Sessi
 		render(w, r, views.PKIContent(d))
 		return
 	}
-	s.page(w, r, sess, "pki", "PKI & Sertifikat", views.PKIPage(d))
+	s.page(w, r, sess, "pki", "PKI & Sertifikat X.509", views.PKIPage(d))
 }
 
 func (s *Server) certIssueForm(w http.ResponseWriter, r *http.Request, _ auth.Session) {

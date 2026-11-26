@@ -83,9 +83,9 @@ func TestV2MultiSiteIncrementalPeeringAndVendorDownloads(t *testing.T) {
 		}
 	}
 
-	// Detail Site modal & clean downloads (Manual Configuration .conf, strongSwan .conf, Root CA .crt, plus Ubah & Atur Peering)
+	// Detail Site modal & clean downloads (Manual Configuration .conf, strongSwan .conf, Root CA .crt, plus Edit & Peering)
 	_, cfgModal := e.do("GET", "/sites/21/configure", nil, hx)
-	for _, want := range []string{"Detail Site: site-a", "Ubah &amp; Atur Peering", `hx-get="/sites/21/ubah"`, "192.0.2.10", "2026-11-26T12:00:00Z", "/unduh/sites/21/generic", "Manual Configuration (.conf)", "/unduh/sites/21/swanctl", "strongSwan (.conf)", "/unduh/pki/ca.crt"} {
+	for _, want := range []string{"Detail Site: site-a", "Edit &amp; Peering", `hx-get="/sites/21/ubah"`, "192.0.2.10", "2026-11-26T12:00:00Z", "/unduh/sites/21/generic", "Manual Configuration (.conf)", "/unduh/sites/21/swanctl", "strongSwan (.conf)", "/unduh/pki/ca.crt"} {
 		if !strings.Contains(cfgModal, want) {
 			t.Errorf("detail site modal missing %q", want)
 		}
@@ -175,9 +175,9 @@ func TestV2C2SSelectiveSiteAccessProfilesAndDisconnect(t *testing.T) {
 		t.Fatalf("edited destinations mismatch: %#v", last)
 	}
 
-	// Detail Akun modal (includes Ubah Akun + Reset Password + clean downloads)
+	// Detail Account modal (includes Edit Account + Reset Password + clean downloads)
 	_, uCfg := e.do("GET", "/akun/3/configure", nil, hx)
-	for _, want := range []string{"Detail Akun: poc-client", "Ubah Akun", `hx-get="/akun/3/ubah"`, "Reset Password", `hx-get="/akun/3/password"`, "192.0.2.10", "/unduh/akun/3/manual.conf", "/unduh/akun/3/profil.json", "/unduh/akun/3/vpnaas-ca.crt"} {
+	for _, want := range []string{"Detail Account: poc-client", "Edit Account", `hx-get="/akun/3/ubah"`, "Reset Password", `hx-get="/akun/3/password"`, "192.0.2.10", "/unduh/akun/3/manual.conf", "/unduh/akun/3/profil.json", "/unduh/akun/3/vpnaas-ca.crt"} {
 		if !strings.Contains(uCfg, want) {
 			t.Errorf("detail akun modal missing %q", want)
 		}
@@ -212,7 +212,7 @@ func TestV2GroupsRoutingPKITokensAndDiagnostics(t *testing.T) {
 
 	// Groups
 	res, body := e.do("GET", "/grup", nil, nil)
-	if res.StatusCode != 200 || !strings.Contains(body, "Grup Client-to-Site") {
+	if res.StatusCode != 200 || !strings.Contains(body, "C2S Groups") {
 		t.Fatalf("/grup: %d", res.StatusCode)
 	}
 	res, _ = e.do("POST", "/grup", url.Values{"name": {"devops"}, "allowed_cidrs": {"10.10.7.0/24"}, "enabled": {"on"}}, e.safe())
@@ -252,7 +252,7 @@ func TestV2GroupsRoutingPKITokensAndDiagnostics(t *testing.T) {
 
 	// PKI
 	res, body = e.do("GET", "/pki", nil, nil)
-	if res.StatusCode != 200 || !strings.Contains(body, "VPNaaS Root CA") || !strings.Contains(body, "Rotasi Sertifikat Server") {
+	if res.StatusCode != 200 || !strings.Contains(body, "VPNaaS Root CA") || !strings.Contains(body, "Rotate Server Cert") {
 		t.Fatalf("/pki: %d", res.StatusCode)
 	}
 	res, _ = e.do("POST", "/pki/certs", url.Values{"name": {"alice-cert"}, "target_type": {"user"}, "validity_days": {"365"}}, e.safe())

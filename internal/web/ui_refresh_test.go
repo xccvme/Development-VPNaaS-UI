@@ -57,40 +57,43 @@ func TestRowActionMenusIdenticalOnAkunAndSites(t *testing.T) {
 			t.Fatalf("%s toggle markup differs from /sites:\n%s\n%s", p, toggles[p], toggles["/sites"])
 		}
 	}
-	for _, want := range []string{`role="menuitem" hx-get="/sites/10/configure"`, ">Detail Site</button>", "/unduh/sites/10/generic", "Manual Configuration (.conf)", "/unduh/sites/10/swanctl", "strongSwan (.conf)", "/unduh/pki/ca.crt", `hx-get="/sites/10/disconnect"`, `hx-get="/sites/10/hapus"`} {
+	for _, want := range []string{`role="menuitem" hx-get="/sites/10/configure"`, ">Detail Site</button>", "/unduh/sites/10/generic", "Manual Configuration (.conf)", "/unduh/sites/10/swanctl", "strongSwan (.conf)", "/unduh/pki/ca.crt", `hx-get="/sites/10/disconnect"`, `hx-get="/sites/10/hapus"`, ">Delete</button>"} {
 		if !strings.Contains(bodies["/sites"], want) {
 			t.Errorf("sites action missing %s", want)
 		}
 	}
-	for _, want := range []string{`role="menuitem" hx-get="/akun/3/configure"`, ">Detail Akun</button>", `/unduh/akun/3/manual.conf`, `/unduh/akun/3/profil.json`, `/unduh/akun/3/vpnaas-ca.crt`, `hx-post="/akun/3/disconnect"`, ">Disconnect</button>", `hx-get="/akun/3/hapus"`} {
+	for _, want := range []string{`role="menuitem" hx-get="/akun/3/configure"`, ">Detail Account</button>", `/unduh/akun/3/manual.conf`, ">Manual Config (.conf)</a>", `/unduh/akun/3/profil.json`, ">VPN Profile (.json)</a>", `/unduh/akun/3/vpnaas-ca.crt`, ">Download Cert (.crt)</a>", `hx-post="/akun/3/disconnect"`, ">Disconnect</button>", `hx-get="/akun/3/hapus"`, ">Delete</button>"} {
 		if !strings.Contains(bodies["/akun"], want) {
 			t.Errorf("akun action missing %s", want)
 		}
 	}
-	for _, removed := range []string{"Putus Semua Sesi", `role="menuitem" hx-get="/akun/3/ubah"`, `role="menuitem" hx-get="/akun/3/password"`, "Setup-Client(windows).ps1", "macOS/iOS", "Android"} {
+	for _, removed := range []string{"Putus Semua Sesi", ">Hapus</button>", `role="menuitem" hx-get="/akun/3/ubah"`, `role="menuitem" hx-get="/akun/3/password"`, "Setup-Client(windows).ps1", "macOS/iOS", "Android"} {
 		if strings.Contains(bodies["/akun"], removed) {
 			t.Errorf("akun kebab menu should not contain %s", removed)
 		}
 	}
-	for _, want := range []string{`id="group-menu-30"`, `role="menuitem" hx-get="/grup/30/ubah"`, `role="menuitem" class="menu-danger" hx-get="/grup/30/hapus"`} {
+	for _, want := range []string{`id="group-menu-30"`, `role="menuitem" hx-get="/grup/30/ubah"`, ">Edit</button>", `role="menuitem" class="menu-danger" hx-get="/grup/30/hapus"`, ">Delete</button>"} {
 		if !strings.Contains(bodies["/grup"], want) {
 			t.Errorf("grup action missing %s", want)
 		}
 	}
-	for _, want := range []string{`id="route-menu-40"`, `role="menuitem" hx-get="/routing/40/ubah"`, `role="menuitem" class="menu-danger" hx-get="/routing/40/hapus"`} {
+	for _, want := range []string{`id="route-menu-40"`, `role="menuitem" hx-get="/routing/40/ubah"`, ">Edit</button>", `role="menuitem" class="menu-danger" hx-get="/routing/40/hapus"`, ">Delete</button>"} {
 		if !strings.Contains(bodies["/routing"], want) {
 			t.Errorf("routing action missing %s", want)
 		}
 	}
-	for _, want := range []string{`id="policy-menu-5"`, `role="menuitem" hx-get="/kebijakan/5/ubah"`, `role="menuitem" class="menu-danger" hx-get="/kebijakan/5/hapus"`} {
+	for _, want := range []string{`id="policy-menu-5"`, `role="menuitem" hx-get="/kebijakan/5/ubah"`, ">Edit</button>", `role="menuitem" class="menu-danger" hx-get="/kebijakan/5/hapus"`, ">Delete</button>"} {
 		if !strings.Contains(bodies["/kebijakan"], want) {
 			t.Errorf("kebijakan action missing %s", want)
 		}
 	}
-	for _, want := range []string{`id="cert-menu-50"`, `href="/unduh/pki/certs/50/cert.crt"`, ">Download Cert (.crt)</a>", `href="/unduh/pki/certs/50/key.key"`, ">Private Key (.key)</a>", `href="/unduh/pki/certs/50/bundle.p12"`, ">Bundle PKCS#12 (.p12)</a>", `href="/unduh/pki/certs/50/bundle.json"`, ">Bundle PEM (.json)</a>", `role="menuitem" class="menu-danger" hx-post="/pki/certs/50/revoke"`, ">Revoke</button>"} {
+	for _, want := range []string{`id="cert-menu-50"`, `href="/unduh/pki/certs/50/cert.crt"`, ">Download Cert (.crt)</a>", `href="/unduh/pki/certs/50/key.key"`, ">Private Key (.key)</a>", `href="/unduh/pki/certs/50/bundle.p12"`, ">Cert + Key Bundle (.p12)</a>", `role="menuitem" class="menu-danger" hx-post="/pki/certs/50/revoke"`, ">Revoke</button>"} {
 		if !strings.Contains(bodies["/pki"], want) {
 			t.Errorf("pki action missing %s", want)
 		}
+	}
+	if strings.Contains(bodies["/pki"], "bundle.json") || strings.Contains(bodies["/pki"], "Bundle PEM") {
+		t.Errorf("pki kebab menu should not contain Bundle PEM (.json)")
 	}
 }
 
@@ -128,7 +131,7 @@ func TestRefreshButtonsHaveLoadingState(t *testing.T) {
 			t.Errorf("%s: no HTMX refresh button", p)
 			continue
 		}
-		for _, want := range []string{`hx-get=`, `hx-disabled-elt="this"`, `hx-indicator="this"`, "Muat ulang", "Memuat...", "animate-spin", `class="refresh-idle`, `class="refresh-loading`} {
+		for _, want := range []string{`hx-get=`, `hx-disabled-elt="this"`, `hx-indicator="this"`, "Refresh", "Loading...", "animate-spin", `class="refresh-idle`, `class="refresh-loading`} {
 			if !strings.Contains(b, want) {
 				t.Errorf("%s: refresh missing %s", p, want)
 			}
@@ -165,7 +168,7 @@ func TestCreateUserFormCIDRAndMaxSessions(t *testing.T) {
 			t.Errorf("select missing %s: %s", want, sel)
 		}
 	}
-	if strings.Contains(sel, `value="0"`) || !strings.Contains(body, "Maks. koneksi bersamaan") || !strings.Contains(body, "perangkat") {
+	if strings.Contains(sel, `value="0"`) || !strings.Contains(body, "Max Concurrent Sessions") || !strings.Contains(body, "perangkat") {
 		t.Error("max sessions label/helper")
 	}
 	// empty CIDRs omitted, max_sessions integer

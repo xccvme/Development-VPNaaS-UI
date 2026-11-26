@@ -24,7 +24,7 @@ type NavItem struct{ Key, Label, Href, Icon string }
 var Nav = []NavItem{
 	{"ringkasan", "Dashboard", "/ringkasan", "grid"},
 	{"vpnaas", "VPNaaS", "/sites", "network"},
-	{"status", "Status & Diagnostik", "/status", "pulse"},
+	{"status", "Status & Diagnostics", "/status", "pulse"},
 	{"audit", "Audit Log", "/audit", "clock"},
 }
 
@@ -249,7 +249,7 @@ func badgeClass(label string) string {
 		return "bg-[#F1F3F5] text-[#495057]"
 	case "Unknown", "unknown", "missing", "DEGRADED":
 		return "bg-[#FFF4E5] text-[#9A5B00]"
-	case "Semua Site", "X.509", "EAP-TLS":
+	case "Semua Site", "All Sites", "X.509", "EAP-TLS":
 		return "bg-[#EDE7F6] text-[#5E35B1]"
 	case "FIPS IKEv2", "VPC", "PSK", "admin", "operator":
 		return "bg-[#E8EEF9] text-[#2F6BC4]"

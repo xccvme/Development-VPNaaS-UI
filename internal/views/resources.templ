@@ -442,7 +442,7 @@ templ trafficMode(f Form) {
 	</fieldset>
 }
 
-// rowActions is the shared row action menu for /sites and /akun: a plain
+// rowActions is the shared row action menu across all VPNaaS tables: a plain
 // vertical three-dot toggle; options live in a manual popover that app.js
 // opens on click only and closes on outside click, Escape or selection.
 templ rowActions(menuID, name string) {
@@ -462,7 +462,7 @@ templ accountActions(u model.User) {
 		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/manual.conf")) } download>Panduan Config Manual (.conf)</a>
 		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/profil.json")) } download title="Profil berisi kredensial; simpan dengan aman">Profil VPN (.json)</a>
 		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/vpnaas-ca.crt")) } download>Download Sertifikat (.crt)</a>
-		<button type="button" role="menuitem" hx-post={ idURL("/akun", u.ID, "/disconnect") } hx-target="#users-table" hx-swap="outerHTML">Putus Semua Sesi</button>
+		<button type="button" role="menuitem" hx-post={ idURL("/akun", u.ID, "/disconnect") } hx-target="#users-table" hx-swap="outerHTML">Disconnect</button>
 		<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/akun", u.ID, "/hapus") } hx-target="#modal">Hapus</button>
 	}
 }
@@ -601,10 +601,10 @@ templ PoliciesTable(t PolicyTable) {
 									@Badge(p.AdminLabel())
 								</td>
 								<td class="px-3 py-3">
-									<div class="flex min-w-[240px] max-w-[320px] flex-wrap gap-1.5">
-										@rowBtn("Ubah", "get", idURL("/kebijakan", p.ID, "/ubah"), "#modal", false)
-										@rowBtn("Hapus", "get", idURL("/kebijakan", p.ID, "/hapus"), "#modal", true)
-									</div>
+									@rowActions("policy-menu-"+itoa(p.ID), p.Name) {
+										<button type="button" role="menuitem" hx-get={ idURL("/kebijakan", p.ID, "/ubah") } hx-target="#modal">Ubah</button>
+										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/kebijakan", p.ID, "/hapus") } hx-target="#modal">Hapus</button>
+									}
 								</td>
 							</tr>
 						}

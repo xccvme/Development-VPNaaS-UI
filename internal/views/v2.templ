@@ -334,10 +334,10 @@ templ GroupsTable(t GroupTable) {
 								<td class="px-3 py-3 text-xs">{ model.Join(namesFromIDs(g.AllowedSites, t.SiteNames)) }</td>
 								<td class="px-3 py-3">@Badge(g.AdminLabel())</td>
 								<td class="px-3 py-3">
-									<div class="flex flex-wrap gap-1.5">
-										@rowBtn("Ubah", "get", idURL("/grup", g.ID, "/ubah"), "#modal", false)
-										@rowBtn("Hapus", "get", idURL("/grup", g.ID, "/hapus"), "#modal", true)
-									</div>
+									@rowActions("group-menu-"+itoa(g.ID), g.Name) {
+										<button type="button" role="menuitem" hx-get={ idURL("/grup", g.ID, "/ubah") } hx-target="#modal">Ubah</button>
+										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/grup", g.ID, "/hapus") } hx-target="#modal">Hapus</button>
+									}
 								</td>
 							</tr>
 						}
@@ -432,10 +432,10 @@ templ RoutesTable(t RouteTable) {
 									@Badge(ternary(r.SyncStatus != "", r.SyncStatus, r.AdminLabel()))
 								</td>
 								<td class="px-3 py-3">
-									<div class="flex flex-wrap gap-1.5">
-										@rowBtn("Ubah", "get", idURL("/routing", r.ID, "/ubah"), "#modal", false)
-										@rowBtn("Hapus", "get", idURL("/routing", r.ID, "/hapus"), "#modal", true)
-									</div>
+									@rowActions("route-menu-"+itoa(r.ID), r.Name) {
+										<button type="button" role="menuitem" hx-get={ idURL("/routing", r.ID, "/ubah") } hx-target="#modal">Ubah</button>
+										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/routing", r.ID, "/hapus") } hx-target="#modal">Hapus</button>
+									}
 								</td>
 							</tr>
 						}
@@ -565,15 +565,15 @@ templ PKIContent(d PKIPageData) {
 									<td class="px-3 py-3 font-mono text-xs">{ cert.ValidityDisplay() }</td>
 									<td class="px-3 py-3">@Badge(cert.StatusLabel())</td>
 									<td class="px-3 py-3">
-										<div class="flex flex-wrap gap-1.5">
-											<a href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/cert.crt") } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">.crt</a>
-											<a href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/key.key") } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">.key</a>
-											<a href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/bundle.p12") } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">.p12</a>
-											<a href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/bundle.json") } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">PEM JSON</a>
+										@rowActions("cert-menu-"+itoa(cert.ID), cert.Name) {
+											<a role="menuitem" href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/cert.crt") } download>Download Cert (.crt)</a>
+											<a role="menuitem" href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/key.key") } download>Private Key (.key)</a>
+											<a role="menuitem" href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/bundle.p12") } download>Bundle PKCS#12 (.p12)</a>
+											<a role="menuitem" href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/bundle.json") } download>Bundle PEM (.json)</a>
 											if !cert.Revoked {
-												<button type="button" hx-post={ "/pki/certs/" + itoa(cert.ID) + "/revoke" } hx-confirm="Cabut sertifikat ini sekarang? CRL akan diperbarui dan sesi aktif terkait diputus." hx-target="#pki-content" hx-swap="outerHTML" class="rounded-full border border-[#F5C2C7] px-3 py-1 text-xs font-semibold text-[#B3261E] hover:bg-[#FDECEA]">Revoke</button>
+												<button type="button" role="menuitem" class="menu-danger" hx-post={ "/pki/certs/" + itoa(cert.ID) + "/revoke" } hx-confirm="Cabut sertifikat ini sekarang? CRL akan diperbarui dan sesi aktif terkait diputus." hx-target="#pki-content" hx-swap="outerHTML">Revoke</button>
 											}
-										</div>
+										}
 									</td>
 								</tr>
 							}

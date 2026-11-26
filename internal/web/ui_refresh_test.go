@@ -15,9 +15,21 @@ func TestRowActionMenusIdenticalOnAkunAndSites(t *testing.T) {
 	e.api.sites = []map[string]any{
 		{"id": 10.0, "name": "site-jkt", "address": "%any", "ike_id": "site-jkt@vpnaas", "subnets": "192.168.10.0/24", "enabled": true, "status": "active", "online": true},
 	}
+	e.api.groups = []map[string]any{
+		{"id": 30.0, "name": "ops-team", "allowed_cidrs": []any{"10.10.7.0/24"}, "allowed_sites": []any{10.0}, "enabled": true},
+	}
+	e.api.routes = []map[string]any{
+		{"id": 40.0, "name": "to-db", "destination_cidr": "10.99.10.0/24", "site_id": 10.0, "metric": 100.0, "enabled": true, "sync_status": "ipsec-managed"},
+	}
+	e.api.certs = []map[string]any{
+		{"id": 50.0, "name": "alice-cert", "san": "alice@vpnaas", "target_type": "user", "serial": "00AA", "not_after": "2027-01-01T00:00:00Z", "days_remaining": 365.0, "revoked": false},
+	}
+	pages := []string{"/sites", "/akun", "/grup", "/routing", "/kebijakan", "/pki"}
 	toggles := map[string]string{}
-	for _, p := range []string{"/akun", "/sites"} {
+	bodies := map[string]string{}
+	for _, p := range pages {
 		_, body := e.do("GET", p, nil, nil)
+		bodies[p] = body
 		if !strings.Contains(body, "data-row-actions") {
 			t.Fatalf("%s: no row action menu", p)
 		}
@@ -40,24 +52,44 @@ func TestRowActionMenusIdenticalOnAkunAndSites(t *testing.T) {
 		norm := regexp.MustCompile(`(aria-label|aria-controls)="[^"]*"`).ReplaceAllString(tg, `$1=""`)
 		toggles[p] = norm
 	}
-	if toggles["/akun"] != toggles["/sites"] {
-		t.Fatalf("toggle markup differs:\n%s\n%s", toggles["/akun"], toggles["/sites"])
+	for _, p := range pages[1:] {
+		if toggles[p] != toggles["/sites"] {
+			t.Fatalf("%s toggle markup differs from /sites:\n%s\n%s", p, toggles[p], toggles["/sites"])
+		}
 	}
-	_, body := e.do("GET", "/sites", nil, nil)
 	for _, want := range []string{`role="menuitem" hx-get="/sites/10/configure"`, ">Detail Site</button>", "/unduh/sites/10/generic", "Manual Configuration (.conf)", "/unduh/sites/10/swanctl", "strongSwan (.conf)", "/unduh/pki/ca.crt", `hx-get="/sites/10/disconnect"`, `hx-get="/sites/10/hapus"`} {
-		if !strings.Contains(body, want) {
+		if !strings.Contains(bodies["/sites"], want) {
 			t.Errorf("sites action missing %s", want)
 		}
 	}
-	_, body = e.do("GET", "/akun", nil, nil)
-	for _, want := range []string{`role="menuitem" hx-get="/akun/3/configure"`, ">Detail Akun</button>", `/unduh/akun/3/manual.conf`, `/unduh/akun/3/profil.json`, `/unduh/akun/3/vpnaas-ca.crt`, `hx-post="/akun/3/disconnect"`, `hx-get="/akun/3/hapus"`} {
-		if !strings.Contains(body, want) {
+	for _, want := range []string{`role="menuitem" hx-get="/akun/3/configure"`, ">Detail Akun</button>", `/unduh/akun/3/manual.conf`, `/unduh/akun/3/profil.json`, `/unduh/akun/3/vpnaas-ca.crt`, `hx-post="/akun/3/disconnect"`, ">Disconnect</button>", `hx-get="/akun/3/hapus"`} {
+		if !strings.Contains(bodies["/akun"], want) {
 			t.Errorf("akun action missing %s", want)
 		}
 	}
-	for _, removed := range []string{`role="menuitem" hx-get="/akun/3/ubah"`, `role="menuitem" hx-get="/akun/3/password"`, "Setup-Client(windows).ps1", "macOS/iOS", "Android"} {
-		if strings.Contains(body, removed) {
+	for _, removed := range []string{"Putus Semua Sesi", `role="menuitem" hx-get="/akun/3/ubah"`, `role="menuitem" hx-get="/akun/3/password"`, "Setup-Client(windows).ps1", "macOS/iOS", "Android"} {
+		if strings.Contains(bodies["/akun"], removed) {
 			t.Errorf("akun kebab menu should not contain %s", removed)
+		}
+	}
+	for _, want := range []string{`id="group-menu-30"`, `role="menuitem" hx-get="/grup/30/ubah"`, `role="menuitem" class="menu-danger" hx-get="/grup/30/hapus"`} {
+		if !strings.Contains(bodies["/grup"], want) {
+			t.Errorf("grup action missing %s", want)
+		}
+	}
+	for _, want := range []string{`id="route-menu-40"`, `role="menuitem" hx-get="/routing/40/ubah"`, `role="menuitem" class="menu-danger" hx-get="/routing/40/hapus"`} {
+		if !strings.Contains(bodies["/routing"], want) {
+			t.Errorf("routing action missing %s", want)
+		}
+	}
+	for _, want := range []string{`id="policy-menu-5"`, `role="menuitem" hx-get="/kebijakan/5/ubah"`, `role="menuitem" class="menu-danger" hx-get="/kebijakan/5/hapus"`} {
+		if !strings.Contains(bodies["/kebijakan"], want) {
+			t.Errorf("kebijakan action missing %s", want)
+		}
+	}
+	for _, want := range []string{`id="cert-menu-50"`, `href="/unduh/pki/certs/50/cert.crt"`, ">Download Cert (.crt)</a>", `href="/unduh/pki/certs/50/key.key"`, ">Private Key (.key)</a>", `href="/unduh/pki/certs/50/bundle.p12"`, ">Bundle PKCS#12 (.p12)</a>", `href="/unduh/pki/certs/50/bundle.json"`, ">Bundle PEM (.json)</a>", `role="menuitem" class="menu-danger" hx-post="/pki/certs/50/revoke"`, ">Revoke</button>"} {
+		if !strings.Contains(bodies["/pki"], want) {
+			t.Errorf("pki action missing %s", want)
 		}
 	}
 }

@@ -298,8 +298,8 @@ func Layout(p Page, content templ.Component) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var12 = []any{"flex items-center gap-3 rounded-lg px-4 py-3 text-[15px] transition-colors hover:bg-white/10",
-					templ.KV("bg-white/15 font-semibold text-white", n.Key == p.Active),
-					templ.KV("text-white/80", n.Key != p.Active)}
+					templ.KV("bg-white/15 font-semibold text-white", navActive(n.Key, p.Active)),
+					templ.KV("text-white/80", !navActive(n.Key, p.Active))}
 				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var12...)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -317,7 +317,7 @@ func Layout(p Page, content templ.Component) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				if n.Key == p.Active {
+				if navActive(n.Key, p.Active) {
 					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, " aria-current=\"page\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err

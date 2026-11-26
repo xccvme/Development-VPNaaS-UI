@@ -481,18 +481,29 @@ type CertRecord struct {
 	Serial        string `json:"serial"`
 	NotBefore     string `json:"not_before"`
 	NotAfter      string `json:"not_after"`
-	DaysRemaining int    `json:"days_remaining"`
+	NoExpiration  bool   `json:"no_expiration"`
+	DaysRemaining *int   `json:"days_remaining"`
 	Expired       bool   `json:"expired"`
 	Revoked       bool   `json:"revoked"`
 	RevokedAt     string `json:"revoked_at"`
 	Fingerprint   string `json:"sha256_fingerprint"`
 }
 
+func (c CertRecord) ValidityDisplay() string {
+	if c.NoExpiration || strings.HasPrefix(c.NotAfter, "9999-") {
+		return "No Expiration"
+	}
+	if c.DaysRemaining != nil {
+		return c.NotAfter + " (" + strconv.Itoa(*c.DaysRemaining) + "h)"
+	}
+	return c.NotAfter
+}
+
 func (c CertRecord) StatusLabel() string {
 	if c.Revoked {
 		return "Revoked"
 	}
-	if c.Expired {
+	if c.Expired && !c.NoExpiration {
 		return "Expired"
 	}
 	return "Active"

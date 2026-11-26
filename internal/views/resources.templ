@@ -458,14 +458,9 @@ templ rowActions(menuID, name string) {
 
 templ accountActions(u model.User) {
 	@rowActions("account-menu-"+itoa(u.ID), u.Username) {
-		<button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/configure") } hx-target="#modal">Configure &amp; Unduh Profil</button>
-		<button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/ubah") } hx-target="#modal">Ubah</button>
-		<button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/password") } hx-target="#modal">Password</button>
+		<button type="button" role="menuitem" hx-get={ idURL("/akun", u.ID, "/configure") } hx-target="#modal">Detail Akun</button>
 		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/manual.conf")) } download>Panduan Config Manual (.conf)</a>
 		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/profil.json")) } download title="Profil berisi kredensial; simpan dengan aman">Profil VPN (.json)</a>
-		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/windows.ps1")) } download>Setup-Client(windows).ps1</a>
-		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/apple.mobileconfig")) } download>Profil macOS/iOS (.mobileconfig)</a>
-		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/android.sswan")) } download>Profil Android (.sswan)</a>
 		<a role="menuitem" href={ templ.URL(idURL("/unduh/akun", u.ID, "/vpnaas-ca.crt")) } download>Download Sertifikat (.crt)</a>
 		<button type="button" role="menuitem" hx-post={ idURL("/akun", u.ID, "/disconnect") } hx-target="#users-table" hx-swap="outerHTML">Putus Semua Sesi</button>
 		<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/akun", u.ID, "/hapus") } hx-target="#modal">Hapus</button>
@@ -473,15 +468,21 @@ templ accountActions(u model.User) {
 }
 
 templ UserConfigureModal(d UserConfigureData) {
-	@ModalWide("Configure Client C2S: " + d.User.Username) {
+	@ModalWide("Detail Akun: " + d.User.Username) {
 		@ErrorBox(d.Err)
 		if d.Err == "" {
 			<div class="space-y-4 text-sm">
-				<div class="flex flex-wrap items-center gap-2">
-					<span class="font-semibold">{ d.User.Username }</span>
-					@Badge(d.User.OnlineLabel())
-					@Badge(d.User.AuthLabel())
-					@Badge("FIPS IKEv2")
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="font-semibold">{ d.User.Username }</span>
+						@Badge(d.User.OnlineLabel())
+						@Badge(d.User.AuthLabel())
+						@Badge("FIPS IKEv2")
+					</div>
+					<div class="flex flex-wrap items-center gap-2">
+						<button type="button" hx-get={ idURL("/akun", d.User.ID, "/ubah") } hx-target="#modal" class="rounded-full bg-[#2F6BC4] px-4 py-2 text-xs font-semibold text-white hover:bg-[#2559A8]">Ubah Akun</button>
+						<button type="button" hx-get={ idURL("/akun", d.User.ID, "/password") } hx-target="#modal" class="rounded-full border border-[#CED4DA] px-4 py-2 text-xs font-semibold text-[#212529] hover:bg-[#F8F9FA]">Reset Password</button>
+					</div>
 				</div>
 				<div class="rounded-lg bg-[#F8F9FA] p-4 font-mono text-xs space-y-1">
 					<div><strong>Server Gateway (Remote Addr &amp; ID):</strong> { ternary(d.HubPublicIP != "", d.HubPublicIP, "—") } · UDP 500 &amp; 4500</div>
@@ -510,19 +511,16 @@ templ UserConfigureModal(d UserConfigureData) {
 					}
 				</div>
 				<div>
-					<div class="mb-2 text-xs font-semibold text-[#495057]">Unduh Profil &amp; File Konfigurasi Client</div>
+					<div class="mb-2 text-xs font-semibold text-[#495057]">Unduh Profil &amp; Konfigurasi Client</div>
 					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/manual.conf")) } download class="rounded-lg bg-[#2F6BC4] px-3 py-2.5 text-center font-semibold text-white hover:bg-[#2559A8]">Panduan Config Manual (.conf)</a>
-						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/windows.ps1")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Windows PowerShell (.ps1)</a>
-						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/apple.mobileconfig")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">macOS / iOS (.mobileconfig)</a>
-						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/android.sswan")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Android strongSwan (.sswan)</a>
-						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/profil.json")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Profil Lengkap JSON (.json)</a>
+						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/profil.json")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Profil VPN (.json)</a>
 					</div>
 				</div>
 				<div class="rounded-lg border border-[#DEE2E6] p-3">
 					<div class="mb-2 text-xs font-semibold text-[#495057]">Sertifikat X.509 (Root CA &amp; Sertifikat Client)</div>
 					<div class="flex flex-wrap gap-2">
-						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/vpnaas-ca.crt")) } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Download Root CA (.crt)</a>
+						<a href={ templ.URL(idURL("/unduh/akun", d.User.ID, "/vpnaas-ca.crt")) } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Download Sertifikat (.crt)</a>
 						if d.User.CertID != nil {
 							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.User.CertID) + "/cert.crt") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Client Cert (.crt)</a>
 							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.User.CertID) + "/key.key") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Private Key (.key)</a>

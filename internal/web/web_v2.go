@@ -761,22 +761,27 @@ func (s *Server) certIssueForm(w http.ResponseWriter, r *http.Request, _ auth.Se
 
 func (s *Server) issueCert(w http.ResponseWriter, r *http.Request, _ auth.Session) {
 	f := formFromRequest(r, 0)
+	noExp := forms.Checkbox(r.PostForm, "no_expiration", false)
+	f.Values["no_expiration"] = ternary(noExp, "on", "")
 	name := strings.TrimSpace(r.PostForm.Get("name"))
 	if name == "" {
 		f.Errs = forms.Errors{"name": "Nama sertifikat wajib diisi"}
 		render(w, r, views.CertIssueForm(f))
 		return
 	}
-	days, err := strconv.Atoi(strings.TrimSpace(r.PostForm.Get("validity_days")))
-	if err != nil || days < 1 || days > 1825 {
-		f.Errs = forms.Errors{"validity_days": "Masa berlaku harus 1–1825 hari"}
-		render(w, r, views.CertIssueForm(f))
-		return
-	}
 	body := map[string]any{
 		"name":          name,
 		"target_type":   strings.TrimSpace(r.PostForm.Get("target_type")),
-		"validity_days": days,
+		"no_expiration": noExp,
+	}
+	if !noExp {
+		days, err := strconv.Atoi(strings.TrimSpace(r.PostForm.Get("validity_days")))
+		if err != nil || days < 1 || days > 3650 {
+			f.Errs = forms.Errors{"validity_days": "Masa berlaku harus 1–3650 hari (atau centang No Expiration)"}
+			render(w, r, views.CertIssueForm(f))
+			return
+		}
+		body["validity_days"] = days
 	}
 	if san := strings.TrimSpace(r.PostForm.Get("san")); san != "" {
 		body["san"] = san

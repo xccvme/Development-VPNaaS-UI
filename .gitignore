@@ -1,9 +1,43 @@
+# Compiled Go binaries & test outputs
 bin/
+vpnaas-ui
+vpnaas-ui.exe
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+
+# Local secrets, state & env files
 .env
 .env.*
+!env.example
 !.env.example
 .session*
 *.key
+*.pem
+*.crt
+*.p12
 secrets/
+ui-state/
+
+# Node / Python / scratch & evidence
+node_modules/
 __pycache__/
+.pytest_cache/
 evidence/
+
+# OS, editors & temporary files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*.log
+*.tmp
+*.bak
+*.orig

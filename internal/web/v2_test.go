@@ -83,14 +83,19 @@ func TestV2MultiSiteIncrementalPeeringAndVendorDownloads(t *testing.T) {
 		}
 	}
 
-	// Configure modal & multi-vendor downloads (including Enterprise generic .conf & Root CA .crt)
+	// Detail Site modal & clean downloads (Manual Configuration .conf, strongSwan .conf, Root CA .crt, plus Ubah & Atur Peering)
 	_, cfgModal := e.do("GET", "/sites/21/configure", nil, hx)
-	for _, want := range []string{"Configure Site: site-a", "192.0.2.10", "2026-11-26T12:00:00Z", "/unduh/sites/21/generic", "/unduh/sites/21/script", "/unduh/sites/21/mikrotik", "/unduh/sites/21/fortigate", "/unduh/sites/21/cisco", "/unduh/pki/ca.crt"} {
+	for _, want := range []string{"Detail Site: site-a", "Ubah &amp; Atur Peering", `hx-get="/sites/21/ubah"`, "192.0.2.10", "2026-11-26T12:00:00Z", "/unduh/sites/21/generic", "Manual Configuration (.conf)", "/unduh/sites/21/swanctl", "strongSwan (.conf)", "/unduh/pki/ca.crt"} {
 		if !strings.Contains(cfgModal, want) {
-			t.Errorf("configure modal missing %q", want)
+			t.Errorf("detail site modal missing %q", want)
 		}
 	}
-	for _, vendor := range []string{"generic", "script", "swanctl", "mikrotik", "fortigate", "cisco"} {
+	for _, removed := range []string{"MikroTik", "FortiGate", "Cisco", "Linux Auto-Setup"} {
+		if strings.Contains(cfgModal, removed) {
+			t.Errorf("detail site modal should not show %q", removed)
+		}
+	}
+	for _, vendor := range []string{"generic", "swanctl"} {
 		res, body := e.do("GET", "/unduh/sites/21/"+vendor, nil, nil)
 		if res.StatusCode != 200 || !strings.Contains(body, "vendor="+vendor) || res.Header.Get("Cache-Control") != "no-store" {
 			t.Errorf("download vendor %s: %d %q", vendor, res.StatusCode, body)
@@ -170,11 +175,11 @@ func TestV2C2SSelectiveSiteAccessProfilesAndDisconnect(t *testing.T) {
 		t.Fatalf("edited destinations mismatch: %#v", last)
 	}
 
-	// C2S Configure modal & manual .conf, Apple .mobileconfig, Android .sswan downloads
+	// Detail Akun modal (includes Ubah Akun + Reset Password + clean downloads)
 	_, uCfg := e.do("GET", "/akun/3/configure", nil, hx)
-	for _, want := range []string{"Configure Client C2S: poc-client", "192.0.2.10", "/unduh/akun/3/manual.conf", "/unduh/akun/3/windows.ps1", "/unduh/akun/3/vpnaas-ca.crt"} {
+	for _, want := range []string{"Detail Akun: poc-client", "Ubah Akun", `hx-get="/akun/3/ubah"`, "Reset Password", `hx-get="/akun/3/password"`, "192.0.2.10", "/unduh/akun/3/manual.conf", "/unduh/akun/3/profil.json", "/unduh/akun/3/vpnaas-ca.crt"} {
 		if !strings.Contains(uCfg, want) {
-			t.Errorf("user configure modal missing %q", want)
+			t.Errorf("detail akun modal missing %q", want)
 		}
 	}
 	res, body := e.do("GET", "/unduh/akun/3/manual.conf", nil, nil)
@@ -253,6 +258,15 @@ func TestV2GroupsRoutingPKITokensAndDiagnostics(t *testing.T) {
 	res, _ = e.do("POST", "/pki/certs", url.Values{"name": {"alice-cert"}, "target_type": {"user"}, "validity_days": {"365"}}, e.safe())
 	if res.StatusCode != 200 || len(e.api.certs) != 1 {
 		t.Fatalf("issue cert: %d", res.StatusCode)
+	}
+	// Issue No Expiration cert (validity_days ignored when no_expiration=on)
+	res, _ = e.do("POST", "/pki/certs", url.Values{"name": {"perm-site"}, "target_type": {"site"}, "no_expiration": {"0", "on"}, "validity_days": {""}}, e.safe())
+	if res.StatusCode != 200 || len(e.api.certs) != 2 {
+		t.Fatalf("issue no-expiration cert: %d", res.StatusCode)
+	}
+	_, pkiTbl := e.do("GET", "/pki/tabel", nil, hx)
+	if !strings.Contains(pkiTbl, "No Expiration") {
+		t.Fatalf("pki table missing No Expiration label: %s", pkiTbl)
 	}
 	res, body = e.do("GET", "/unduh/pki/ca.crt", nil, nil)
 	if res.StatusCode != 200 || !strings.Contains(body, "BEGIN CERTIFICATE") {

@@ -73,9 +73,9 @@ templ Layout(p Page, content templ.Component) {
 						<a
 							href={ templ.URL(n.Href) }
 							class={ "flex items-center gap-3 rounded-lg px-4 py-3 text-[15px] transition-colors hover:bg-white/10",
-								templ.KV("bg-white/15 font-semibold text-white", n.Key == p.Active),
-								templ.KV("text-white/80", n.Key != p.Active) }
-							if n.Key == p.Active {
+								templ.KV("bg-white/15 font-semibold text-white", navActive(n.Key, p.Active)),
+								templ.KV("text-white/80", !navActive(n.Key, p.Active)) }
+							if navActive(n.Key, p.Active) {
 								aria-current="page"
 							}
 						>

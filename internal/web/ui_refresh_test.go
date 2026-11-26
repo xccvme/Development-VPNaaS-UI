@@ -44,15 +44,20 @@ func TestRowActionMenusIdenticalOnAkunAndSites(t *testing.T) {
 		t.Fatalf("toggle markup differs:\n%s\n%s", toggles["/akun"], toggles["/sites"])
 	}
 	_, body := e.do("GET", "/sites", nil, nil)
-	for _, want := range []string{`role="menuitem" hx-get="/sites/10/ubah"`, `role="menuitem" hx-post="/sites/10/connect" hx-target="#sites-table" hx-swap="outerHTML"`, `hx-get="/sites/10/disconnect"`, `hx-get="/sites/10/hapus"`} {
+	for _, want := range []string{`role="menuitem" hx-get="/sites/10/configure"`, ">Detail Site</button>", "/unduh/sites/10/generic", "Manual Configuration (.conf)", "/unduh/sites/10/swanctl", "strongSwan (.conf)", "/unduh/pki/ca.crt", `hx-get="/sites/10/disconnect"`, `hx-get="/sites/10/hapus"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("sites action missing %s", want)
 		}
 	}
 	_, body = e.do("GET", "/akun", nil, nil)
-	for _, want := range []string{`hx-get="/akun/3/ubah"`, `hx-get="/akun/3/password"`, `/unduh/akun/3/profil.json`, `/unduh/akun/3/windows.ps1`, `/unduh/akun/3/vpnaas-ca.crt`, `hx-get="/akun/3/hapus"`} {
+	for _, want := range []string{`role="menuitem" hx-get="/akun/3/configure"`, ">Detail Akun</button>", `/unduh/akun/3/manual.conf`, `/unduh/akun/3/profil.json`, `/unduh/akun/3/vpnaas-ca.crt`, `hx-post="/akun/3/disconnect"`, `hx-get="/akun/3/hapus"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("akun action missing %s", want)
+		}
+	}
+	for _, removed := range []string{`role="menuitem" hx-get="/akun/3/ubah"`, `role="menuitem" hx-get="/akun/3/password"`, "Setup-Client(windows).ps1", "macOS/iOS", "Android"} {
+		if strings.Contains(body, removed) {
+			t.Errorf("akun kebab menu should not contain %s", removed)
 		}
 	}
 }

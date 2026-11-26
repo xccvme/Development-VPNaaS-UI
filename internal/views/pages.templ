@@ -3,7 +3,7 @@ package views
 import "vpnaas/ui-goth/internal/model"
 
 templ OverviewPage(o Overview) {
-	@PageHeader("Ringkasan", "Gambaran langsung infrastruktur VPN Anda dari gateway.", PageRefresh("/ringkasan"))
+	@PageHeader("Dashboard", "Gambaran langsung infrastruktur VPN Anda dari gateway.", PageRefresh("/ringkasan"))
 	for _, e := range o.Errors {
 		@ErrorBox(e)
 	}
@@ -117,7 +117,7 @@ templ StatusPage(items []KV, err string) {
 }
 
 templ AuditPage(a Audit) {
-	@PageHeader("Audit", "Riwayat aktivitas control-plane (hanya metadata).", nil)
+	@PageHeader("Audit Log", "Riwayat aktivitas control-plane (hanya metadata).", nil)
 	@AuditTable(a)
 }
 

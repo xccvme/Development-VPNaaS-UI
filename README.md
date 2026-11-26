@@ -1,125 +1,36 @@
-# VPNaaS Console
+# VPNaaS Enterprise Dev Console (UI)
 
-UI Go + templ + HTMX + Tailwind untuk mengelola koneksi S2S, akun C2S, kebijakan, sesi, status gateway, audit, dan unduhan profil/Windows/CA. Backend VPNaaS harus sudah berjalan. Repository ini **hanya UI**, bukan installer backend; tidak ada `install.sh`.
+Console web ringan berbasis **Go + templ + HTMX + Tailwind CSS** untuk pengujian dan operasional **VPNaaS Backend REST API** (IPsec/IKEv2 FIPS). Repository ini **hanya UI** — Backend VPNaaS harus sudah terpasang dan berjalan.
 
-## Pilih skenario
+### Struktur Menu
+- **Dashboard** (`/ringkasan`) — ringkasan jumlah & status S2S, C2S, Static Routing, dan Telemetri Gateway.
+- **VPNaaS** (`/sites`) — tab terpadu untuk **Site-to-Site (S2S)**, **Client-to-Site (C2S)**, **Grup C2S**, **Static Routing**, **Firewall Rules**, dan **PKI** (mendukung sertifikat dengan masa berlaku hari maupun *No Expiration*).
+- **Status & Diagnostik** (`/status`) — readiness `/api/ready`, metadata gateway, cek jalur konektivitas, dan log layanan.
+- **Audit Log** (`/audit`) — riwayat aktivitas control-plane.
 
-- **Linux, UI dan backend satu VM:** `compose.yaml` memakai host networking agar API `127.0.0.1:8000` tetap privat.
-- **Windows, backend di server Linux:** Docker Desktop Linux containers dengan host networking aktif, SSH tunnel lokal, lalu `compose.windows.yaml`.
+> **Integrasi Customer Portal:** UI ini berkomunikasi langsung ke Backend menggunakan native REST API (`/api/*` + `X-API-Key`). Customer Portal menggunakan endpoint, payload JSON, dan `X-API-Key` yang **sama persis**, cukup buka port `8000` di Security Group khusus untuk IP Customer Portal.
 
-Login awal: username **admin**, password **admin**. Kredensial awal hanya didokumentasikan di README, tidak ditampilkan pada halaman login. Ganti `ADMIN_USERNAME` dan `ADMIN_PASSWORD` di `.env` sebelum penggunaan bersama atau akses publik.
+---
 
-## Windows — Docker Desktop sudah terpasang
+## 1. Instalasi Baru (Linux — Satu VM dengan Backend)
 
-Jalankan dari PowerShell. Gunakan Docker Desktop **4.34 atau lebih baru**, mode **Linux containers**, dan biarkan Desktop berjalan.
-
-### 1. Git dan repository privat
-
-```powershell
-git --version
-# Hanya bila Git belum terpasang:
-winget install --id Git.Git -e --source winget
-```
-
-Setelah instalasi Git, buka ulang PowerShell. Git for Windows menyertakan Git Credential Manager. Saat clone HTTPS, selesaikan login GitHub di browser dengan akun yang diberi akses repository privat. Jangan memasukkan token ke URL, `.env`, command history, atau source.
-
-```powershell
-git clone https://github.com/xccvme/Development-VPNaaS-UI.git
-cd Development-VPNaaS-UI
-Copy-Item env.example .env
-docker version
-docker compose version
-ssh -V
-```
-
-Jika `ssh`/`scp` belum tersedia, aktifkan fitur opsional Windows **OpenSSH Client**. Ganti `SERVER` pada contoh dengan alamat server backend. Akun SSH harus memiliki akses sah ke server dan file API key.
-
-### 2. Aktifkan host networking
-
-Buka Docker Desktop **Settings → Resources → Network → Enable host networking**, lalu **Apply & restart**. Fitur ini opt-in, membutuhkan versi 4.34+, hanya mendukung Linux containers, dan dapat tidak kompatibel dengan Enhanced Container Isolation. Jika kebijakan perangkat melarangnya, jalankan UI pada VM Linux seperti bagian berikut; jangan membuka API ke internet.
-
-`compose.windows.yaml` adalah konfigurasi mandiri, bukan override: gunakan `-f` pada setiap perintah. Runtime memakai `network_mode: host`, tanpa port publishing. Dengan fitur Desktop tersebut aktif, container dapat mengakses layanan TCP loopback host. Tetap verifikasi koneksinya seperti di bawah: panduan ini **belum diuji pada Windows nyata**.
-
-### 3. API key dan SSH tunnel
-
-```powershell
-New-Item -ItemType Directory -Force secrets | Out-Null
-scp root@SERVER:/etc/vpnaas/api.key ./secrets/backend-api.key
-```
-
-Transfer memakai SSH. Jangan menampilkan isi key atau menempelkannya ke browser/chat. Batasi akses folder lokal melalui Windows Security/NTFS untuk akun yang menjalankan Docker Desktop; hindari folder bersama. `.env`, `*.key`, dan `secrets/` diabaikan Git dan build context. Key hanya dipasang read-only, bukan dimasukkan ke image.
-
-Buka **PowerShell kedua** dan biarkan tunnel ini aktif selama UI dipakai:
-
-```powershell
-ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18000:127.0.0.1:8000 root@SERVER
-```
-
-Tunnel bind hanya ke loopback Windows, bukan `0.0.0.0`. Sisi remote mengakses loopback server backend melalui SSH. Periksa fingerprint SSH saat koneksi pertama. Port SSH harus dapat dijangkau, tetapi **jangan membuka port API 8000**.
-
-Di terminal pertama:
-
-```powershell
-Test-NetConnection 127.0.0.1 -Port 18000
-curl.exe -i http://127.0.0.1:18000/api/overview
-```
-
-Respons 401/403 tanpa API key tetap menunjukkan API dapat dicapai, belum membuktikan autentikasi berhasil. Connection refused/timeout berarti tunnel atau backend belum siap.
-
-### 4. Konfigurasi dan jalankan
-
-Edit `notepad .env`, isi seperti berikut dan ganti password dengan nilai sendiri:
-
-```dotenv
-LISTEN_ADDR=127.0.0.1:8080
-UPSTREAM_URL=http://127.0.0.1:18000
-BACKEND_API_KEY_FILE=./secrets/backend-api.key
-ADMIN_USERNAME=operator
-ADMIN_PASSWORD=ganti-dengan-password-kuat
-COOKIE_SECURE=0
-```
-
-```powershell
-docker compose -f compose.windows.yaml config --quiet
-docker compose -f compose.windows.yaml up -d --build
-docker compose -f compose.windows.yaml ps
-docker compose -f compose.windows.yaml logs --tail=100 ui
-```
-
-Buka **http://127.0.0.1:8080**, login memakai `.env`, lalu periksa Ringkasan dan Status Runtime. Data backend yang tampil tanpa error upstream membuktikan jalur container dan autentikasi bekerja; halaman login atau `/healthz` saja belum cukup. Bila host dapat mengakses tunnel tetapi UI gagal, cek host networking benar-benar aktif, Desktop sudah restart, file key benar, dan log upstream. Jangan mengatasi masalah dengan mempublikasikan API.
-
-**Mengapa bukan `host.docker.internal`?** Loopback remote `127.0.0.1` bukan loopback Windows. Pada bridge Desktop, `host.docker.internal` menunjuk host, tetapi **tidak menjamin** layanan yang hanya bind ke loopback Windows dapat diakses secara default. Jangan mengganti upstream ke `http://host.docker.internal:18000` tanpa menguji dari container dan meninjau bind address/firewall. Pada Linux, `host-gateway` juga menunjuk IP gateway bridge, bukan loopback host. Solusi di sini sengaja menggunakan host networking + tunnel host-only; alternatifnya jalankan UI di VM backend.
-
-## Linux baru — UI dan backend satu VM
-
-Contoh Debian/Ubuntu dengan `sudo`. Tinjau dampak upgrade/reboot pada VM produksi. Jika login root dan `sudo` tidak tersedia, hilangkan awalan `sudo`.
-
-```sh
-sudo apt update
-sudo apt upgrade -y
-sudo apt install -y curl ca-certificates git
-curl https://get.docker.com -o get-docker.sh
-# Tinjau skrip sebelum menjalankannya dengan hak root.
-sudo sh get-docker.sh
+Pastikan Docker & Docker Compose sudah terpasang:
+```bash
+sudo apt-get update && sudo apt-get install -y curl ca-certificates git
+curl -fsSL https://get.docker.com | sudo sh
 sudo systemctl enable --now docker
-sudo docker version
-sudo docker compose version
 ```
 
-Skrip tersebut milik Docker, bukan installer project. Gunakan repository/paket resmi Docker sesuai kebijakan organisasi bila convenience script tidak diperbolehkan. Contoh tetap memakai `sudo docker`: akses grup docker setara hak root.
-
-Clone dengan akun GitHub yang memiliki akses repository privat. Gunakan credential manager aman atau prompt HTTPS, **tanpa token di URL**. Password akun GitHub tidak berlaku untuk Git HTTPS. Jangan memakai credential helper plaintext `store` untuk token.
-
-```sh
+Clone repo dan konfigurasi `.env`:
+```bash
 git clone https://github.com/xccvme/Development-VPNaaS-UI.git
 cd Development-VPNaaS-UI
 cp env.example .env
-sudo test -f /etc/vpnaas/api.key
-# Edit .env dengan editor pilihan Anda.
+chmod 600 .env
+nano .env
 ```
 
-Untuk backend satu VM:
-
+Isi `.env` (ganti `ADMIN_USERNAME` dan `ADMIN_PASSWORD`):
 ```dotenv
 LISTEN_ADDR=0.0.0.0:8080
 UPSTREAM_URL=http://127.0.0.1:8000
@@ -129,97 +40,92 @@ ADMIN_PASSWORD=ganti-dengan-password-kuat
 COOKIE_SECURE=0
 ```
 
-```sh
-chmod 600 .env
-sudo docker compose config --quiet
+Bangun dan jalankan container:
+```bash
 sudo docker compose up -d --build
 sudo docker compose ps
-sudo docker compose logs --tail=100 ui
+sudo docker compose logs --tail=50 ui
 ```
 
-Buka **http://IP-VM:8080** dari jaringan yang diizinkan firewall. Backend harus mendengarkan pada loopback VM. `/etc/vpnaas/api.key` harus file benar, bukan direktori; mount read-only menolak pembuatan direktori otomatis bila file hilang. Jangan menyalin key ke source/image. Build Linux juga memakai jaringan host dan membutuhkan internet untuk image resmi, paket Debian, serta modul Go.
+Akses UI di **`http://<IP-SERVER>:8080`**.
 
-**Linux dengan backend remote:** buat tunnel SSH yang sama pada host Linux (`127.0.0.1:18000`), salin key dengan `scp` ke `./secrets/backend-api.key`, batasi mode file `chmod 600`, set `UPSTREAM_URL=http://127.0.0.1:18000` serta `BACKEND_API_KEY_FILE=./secrets/backend-api.key`. Tetap gunakan `compose.yaml` host networking dan pertahankan tunnel. Tidak perlu bridge gateway atau API publik.
+---
 
-## Port dan keamanan
+## 2. Cara Update UI (Saat Ada Perubahan di GitHub)
 
-| Variabel `.env` | Kegunaan |
-|---|---|
-| `LISTEN_ADDR` | Alamat/port UI host network. Linux default `0.0.0.0:8080`; Windows contoh `127.0.0.1:8080`. |
-| `UPSTREAM_URL` | Satu VM `http://127.0.0.1:8000`; SSH tunnel `http://127.0.0.1:18000`. |
-| `BACKEND_API_KEY_FILE` | File di **host**, dipasang read-only ke `/run/secrets/backend-api.key`. Windows gunakan path relatif `./secrets/backend-api.key`. |
-| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Login UI, terpisah dari akun VPN/API key; kosong memakai login awal di atas. |
-| `COOKIE_SECURE` | `0` untuk HTTP lokal, `1` hanya untuk akses browser melalui HTTPS. |
+Gunakan langkah ini agar file yang dihapus di repo ikut bersih (mencegah konflik build dari file lama):
 
-Untuk port 9090, ganti `LISTEN_ADDR=127.0.0.1:9090` (lokal) atau `0.0.0.0:9090` (jaringan dengan firewall), lalu jalankan `up -d` lagi dan buka alamat baru. Tidak ada `ports:` atau `UI_PORT`: host networking menggunakan `LISTEN_ADDR` langsung; port harus bebas. `EXPOSE 8080` pada Dockerfile hanya metadata.
-
-Jangan membuka login awal ke internet. Batasi firewall dan gunakan reverse proxy HTTPS untuk akses jaringan. Pertahankan Host/skema yang sesuai validasi Origin aplikasi. API key hanya dibaca server-side. Hindari membagikan `docker compose config` tanpa `--quiet`, karena environment dapat berisi password. Lindungi akses Docker daemon serta backup key/state.
-
-## Operasional, state, dan pembaruan
-
-Linux (tambahkan `sudo` bila diperlukan):
-
-```sh
-docker compose ps
-docker compose logs -f --tail=100 ui
-docker compose restart ui
-git pull --ff-only
-docker compose up -d --build
-docker compose down
+```bash
+cd ~/Development-VPNaaS-UI
+git fetch origin
+git reset --hard origin/main
+sudo docker compose up -d --build
+sudo docker compose ps
 ```
 
-Windows PowerShell:
+> File `.env` tidak akan terhapus oleh `git reset --hard` karena diabaikan oleh `.gitignore`.
+> Jika hanya mengubah `.env` (mis. ganti `ADMIN_PASSWORD` atau `LISTEN_ADDR`), cukup jalankan:
+> ```bash
+> sudo docker compose up -d --force-recreate
+> ```
 
-```powershell
-docker compose -f compose.windows.yaml ps
-docker compose -f compose.windows.yaml logs -f --tail=100 ui
-docker compose -f compose.windows.yaml restart ui
-git pull --ff-only
-docker compose -f compose.windows.yaml up -d --build
-docker compose -f compose.windows.yaml down
+---
+
+## 3. Cara Install Ulang Bersih / Reset State UI (Clean Reinstall)
+
+Menghapus container, volume session key (`ui-state`), serta clone ulang dari GitHub (data VPN di Backend **tidak ikut terhapus**):
+
+```bash
+cd ~/Development-VPNaaS-UI
+sudo docker compose down -v
+
+# Simpan .env bila ingin dipakai lagi, lalu clone ulang bersih
+cp .env /tmp/vpnaas-ui.env.bak
+cd ~
+rm -rf Development-VPNaaS-UI
+git clone https://github.com/xccvme/Development-VPNaaS-UI.git
+cd Development-VPNaaS-UI
+mv /tmp/vpnaas-ui.env.bak .env
+chmod 600 .env
+
+sudo docker compose up -d --build
+sudo docker compose logs --tail=50 ui
 ```
 
-`restart` tidak membaca ulang `.env`; setelah perubahan konfigurasi pakai `up -d` untuk recreate. Sesudah update source pakai `up -d --build`. Setelah reboot Windows, Docker Desktop dan tunnel harus aktif kembali; `restart: always` tidak menyalakan Desktop atau SSH tunnel secara otomatis.
+---
 
-Kunci sesi dibuat otomatis mode 0600 dalam volume `ui-state`. Restart/recreate mempertahankan kunci dan cookie yang belum kedaluwarsa. `down` mempertahankan volume; **jangan gunakan `down -v`** kecuali ingin membuang kunci dan memutus semua sesi. Logout revocation bersifat in-memory. Data VPN tetap disimpan backend, bukan volume UI. Backup state/config/key secara aman, terpisah dari Git.
+## 4. Menjalankan dari Windows (Remote ke Server Backend)
 
-## Source dan verifikasi
+1. Aktifkan **Settings → Resources → Network → Enable host networking** di Docker Desktop.
+2. Salin API key backend dan buka SSH tunnel:
+   ```powershell
+   New-Item -ItemType Directory -Force secrets | Out-Null
+   scp root@SERVER:/etc/vpnaas/api.key ./secrets/backend-api.key
+   ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18000:127.0.0.1:8000 root@SERVER
+   ```
+3. Set `.env` (`UPSTREAM_URL=http://127.0.0.1:18000`, `BACKEND_API_KEY_FILE=./secrets/backend-api.key`, `LISTEN_ADDR=127.0.0.1:8080`), lalu jalankan:
+   ```powershell
+   docker compose -f compose.windows.yaml up -d --build
+   ```
 
-Dockerfile multi-stage menjalankan Go test/vet dan menghasilkan binary statis. `.templ`, hasil `*_templ.go`, CSS terkompilasi, HTMX, dan logo lokal sudah disertakan. Build produksi tidak membutuhkan Node, templ, atau Tailwind di host; tidak memakai CDN.
+---
 
-Lihat [pengembangan](dokumentasi/PENGEMBANGAN.md) dan [fitur/keamanan](dokumentasi/FITUR.md). Docker Desktop belum diuji pada Windows nyata. Keberhasilan HTTP/Linux tidak membuktikan cmdlet VPN Windows atau networking Desktop pada perangkat Anda sudah berjalan.
+## 5. Variabel Lingkungan `.env`
 
-## Unduhan akun dan setup Windows
+| Variabel | Default | Keterangan |
+| :--- | :--- | :--- |
+| `LISTEN_ADDR` | `0.0.0.0:8080` | Alamat & port UI (host networking). |
+| `UPSTREAM_URL` | `http://127.0.0.1:8000` | URL Backend REST API VPNaaS. |
+| `BACKEND_API_KEY_FILE` | `/etc/vpnaas/api.key` | Path file API key di host (di-mount read-only). |
+| `ADMIN_USERNAME` | `admin` | Username login console. |
+| `ADMIN_PASSWORD` | `admin` | Password login console (wajib diganti). |
+| `COOKIE_SECURE` | `0` | Set `1` hanya jika diakses lewat HTTPS. |
 
-Menu akun menyediakan **Profil VPN (.json)** (berisi kredensial; simpan dengan aman), **Setup-Client(windows).ps1**, dan **Download Sertifikat (.crt)**. Semua unduhan memerlukan login dan memakai `Cache-Control: no-store`. Profil JSON diunduh sebagai `Profil-VPN-<username>.json`, skrip sebagai `Setup-Client-<username>.ps1`, dan sertifikat CA sebagai `<username>.crt`; semua nama memakai sanitasi username yang sama: karakter `:` diganti `_`, titik akhir dihapus, dan nama perangkat Windows seperti `CON` diberi awalan `_` agar nama file aman. Sertifikat adalah CA publik bersama, bukan sertifikat privat per akun.
+## Pengembangan & Pengujian
 
-Jalankan skrip dari **Windows PowerShell → Run as Administrator / Jalankan sebagai Administrator**, menggunakan akun Windows yang sama. Skrip berhenti dengan pesan jelas sebelum perubahan bila tidak elevated. Default **nama profil koneksi VPN** sama persis dengan username akun VPN, bukan nama NIC/adaptor fisik; tekan Enter untuk mempertahankan atau isi nama lain pada prompt opsional. Konfirmasi kepercayaan CA tetap diperlukan. Password VPN dimasukkan sendiri melalui dialog Windows, tidak disertakan dalam skrip. Split/full, proposal IKE/IPsec, dan impor CA tetap mengikuti profil. Setelah mengganti mode, unduh dan terapkan ulang saat VPN terputus lalu reconnect.
-
-## VPN Hub
-
-Menu **VPN Hub** (URL tetap `/koneksi`, dulu "Koneksi S2S") menghubungkan LAN dua site lewat server ini sebagai hub: **Site-A ⇄ Hub ⇄ Site-B**. Tiap site cukup membuat tunnel IPsec ke hub; hub meneruskan trafik antar kedua LAN sehingga client di Site-A bisa ping/akses Site-B dan sebaliknya.
-
-- **Buat VPN Hub**: isi Nama, lalu kartu **Site-A** dan **Site-B**: Nama site, Alamat publik (kosong = `%any`, site di belakang NAT yang memulai koneksi), IKE ID (opsional, default `<nama>-a@vpnaas`), PSK (opsional; kosong = generate otomatis, saat ubah kosong = tidak diubah; PSK tidak pernah ditampilkan ulang), Subnet LAN (1–8 CIDR IPv4, satu per baris atau koma; subnet kedua site tidak boleh tumpang tindih), dan NAT/masquerade (default aktif; aktifkan jika router LAN tidak punya route balik ke site lawan).
-- **Tabel**: Nama | Site-A | Site-B | Aksi, dengan status Active/Down per site, subnet, remote host, dan byte in/out. Refresh otomatis 30 detik (berhenti saat tab tersembunyi).
-- **Aksi ⋮**: Ubah, Configure Site-A/B (langkah setup), Download script Site-A/B (`Setup-Hub-<nama>-Site-A.sh`), Download config Site-A/B (`Hub-<nama>-Site-A.conf`, format swanctl), Connect/Disconnect per site (Disconnect minta konfirmasi), Hapus. Script dan config berisi PSK site; unduhan memerlukan login dan memakai `Cache-Control: no-store`.
-- **Setup site**: unduh script, salin ke gateway site (Linux), jalankan `sudo bash Setup-Hub-<nama>-Site-A.sh`, tunggu status menjadi Active. Gateway site harus mengaktifkan IP forwarding dan menjadi jalur LAN ke subnet site lawan. Site dengan alamat `%any` tidak bisa di-Connect dari hub (backend menjawab 409; pesannya ditampilkan di UI) — koneksi dimulai dari gateway site.
-- **Koneksi lama**: baris tanpa `topology` atau `topology: "direct"` tampil di bagian **Direct (lama)** dengan kolom dan aksi lama (Ubah lewat form lama, Connect/Disconnect, Hapus). Form lama tetap tersedia lewat tautan "Koneksi Direct (lama)" di form Buat VPN Hub (`/koneksi/baru?topology=direct`).
-- **Ringkasan**: kartu VPN Hub menghitung status per site (tiap hub = 2 site) ditambah koneksi direct.
-
-Endpoint backend yang diproxy UI (allowlist ketat): `GET /api/connections/{id}/sites/{a|b}/config?format=script|swanctl`, `POST /api/connections/{id}/sites/{a|b}/connect|disconnect`.
-
-## Tampilan aplikasi
-
-Tangkapan layar langsung dari aplikasi yang berjalan, bukan mockup. IP publik ditutup dengan label **IP PUBLIK DISAMARKAN** untuk publikasi; subnet privat tetap ditampilkan. Status, jumlah sesi, dan penghitung trafik tidak diubah. Bukan bukti pengujian koneksi Windows.
-
-### VPN Hub — status Site-A dan Site-B
-
-![VPN Hub dengan status masing-masing site](dokumentasi/images/vpn-hub.png)
-
-### Ubah VPN Hub — konfigurasi Site-A dan Site-B
-
-![Form konfigurasi kedua site, subnet LAN, dan NAT](dokumentasi/images/ubah-vpn-hub.png)
-
-### Daftar akun C2S
-
-![Daftar akun C2S dengan status dan batas sesi](dokumentasi/images/akun.png)
+Dockerfile multi-stage otomatis menjalankan `go test ./...`, `go vet ./...`, dan menghasilkan binary statis Go. Untuk verifikasi lokal:
+```bash
+templ generate
+go vet ./...
+go test -count=1 ./...
+```

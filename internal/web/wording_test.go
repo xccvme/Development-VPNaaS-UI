@@ -33,8 +33,16 @@ func TestFirewallRulesWording(t *testing.T) {
 		}
 	}
 	nav := regexp.MustCompile(`(?s)<nav.*?</nav>`).FindString(body)
-	if !strings.Contains(nav, `href="/kebijakan"`) || !strings.Contains(nav, "<span>Firewall</span>") || strings.Contains(nav, "Kebijakan") {
-		t.Errorf("sidebar label must be Firewall: %s", nav)
+	for _, want := range []string{"<span>Dashboard</span>", "<span>VPNaaS</span>", "<span>Status &amp; Diagnostik</span>", "<span>Audit Log</span>"} {
+		if !strings.Contains(nav, want) {
+			t.Errorf("sidebar missing %s: %s", want, nav)
+		}
+	}
+	if strings.Contains(nav, "Token API") || strings.Contains(nav, "Kebijakan") {
+		t.Errorf("sidebar must only have the 4 clean items: %s", nav)
+	}
+	if !strings.Contains(body, `role="tab"`) || !strings.Contains(body, ">Firewall Rules</a>") {
+		t.Errorf("VPNaaS tabs missing Firewall Rules")
 	}
 	_, form := e.do("GET", "/kebijakan/baru", nil, map[string]string{"HX-Request": "true"})
 	for _, want := range []string{"Buat Firewall Rule", "Source CIDR", "Destination CIDR", `name="source_cidr"`, `name="destination_cidr"`, "Jaringan asal traffic", "Jaringan tujuan traffic"} {
@@ -52,7 +60,8 @@ func TestConnectDisconnectWording(t *testing.T) {
 	}
 	_, body := e.do("GET", "/sites", nil, nil)
 	for _, want := range []string{
-		`hx-post="/sites/10/connect"`, ">Connect</button>",
+		`hx-get="/sites/10/configure"`, ">Detail Site</button>",
+		">Manual Configuration (.conf)</a>", ">strongSwan (.conf)</a>", ">Root CA (.crt)</a>",
 		`hx-get="/sites/10/disconnect"`, ">Disconnect</button>",
 		">Online<", "2026-11-26T10:00:00Z",
 	} {
@@ -60,8 +69,10 @@ func TestConnectDisconnectWording(t *testing.T) {
 			t.Errorf("/sites missing %q", want)
 		}
 	}
-	if strings.Contains(body, ">Initiate<") || strings.Contains(body, ">Terminate<") {
-		t.Error("old Initiate/Terminate labels remain")
+	for _, bad := range []string{">Initiate<", ">Terminate<", ">Connect</button>", "MikroTik", "FortiGate", "Cisco", "Script Linux"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("/sites still contains removed item %q", bad)
+		}
 	}
 	_, modal := e.do("GET", "/sites/10/disconnect", nil, map[string]string{"HX-Request": "true"})
 	for _, want := range []string{"Disconnect Site S2S", `hx-post="/sites/10/disconnect"`, ">Disconnect</button>"} {

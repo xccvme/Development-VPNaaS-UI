@@ -428,7 +428,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, sess auth.Sess
 		}
 		o.Info = kvs(ov)
 	}
-	s.page(w, r, sess, "ringkasan", "Ringkasan", views.OverviewPage(o))
+	s.page(w, r, sess, "ringkasan", "Dashboard", views.OverviewPage(o))
 }
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request, sess auth.Session) {
@@ -490,7 +490,7 @@ func (s *Server) audit(w http.ResponseWriter, r *http.Request, sess auth.Session
 		render(w, r, views.AuditTable(a))
 		return
 	}
-	s.page(w, r, sess, "audit", "Audit", views.AuditPage(a))
+	s.page(w, r, sess, "audit", "Audit Log", views.AuditPage(a))
 }
 
 func (s *Server) userTable(r *http.Request, flash *views.Flash) views.UserTable {

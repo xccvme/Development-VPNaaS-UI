@@ -10,7 +10,7 @@ templ SitesPage(t SiteTable) {
 	<details class="mb-4 rounded-lg border border-[#DEE2E6] bg-[#F8F9FA] px-4 py-2 text-sm text-[#495057]" data-s2s-info>
 		<summary class="cursor-pointer select-none font-semibold text-[#2F6BC4]">Panduan koneksi bertahap Site-A → Site-N &amp; NAT di belakang site</summary>
 		<ul class="mt-2 list-disc space-y-1 pl-5 text-xs">
-			<li><strong>Mulai dari 1 site (Site-A):</strong> Buat Site-A terlebih dahulu lalu unduh konfigurasi dari menu Configure (Linux, MikroTik, FortiGate, Cisco).</li>
+			<li><strong>Mulai dari 1 site (Site-A):</strong> Buat Site-A terlebih dahulu lalu unduh konfigurasi dari menu Detail Site (Manual Configuration <code>.conf</code> atau <code>strongSwan .conf</code>).</li>
 			<li><strong>Tambah Site-B..N:</strong> Saat menambah site berikutnya, centang site lama yang boleh saling terhubung (Peer Sites). Antar-site yang tidak dicentang tetap terisolasi (default-deny).</li>
 			<li><strong>NAT / masquerade di sisi site:</strong> Aktifkan agar host LAN di belakang site dapat diakses oleh C2S maupun peer site tanpa perlu route balik manual.</li>
 			<li><strong>OpenStack:</strong> Pastikan port LAN gateway memiliki allowed-address-pairs atau port security sesuai agar paket tidak di-drop anti-spoofing.</li>
@@ -96,16 +96,10 @@ templ SitesTable(t SiteTable) {
 								</td>
 								<td class="px-3 py-3">
 									@rowActions("site-menu-"+itoa(s.ID), s.Name) {
-										<button type="button" role="menuitem" hx-get={ idURL("/sites", s.ID, "/configure") } hx-target="#modal">Configure &amp; Unduh Config</button>
-										<button type="button" role="menuitem" hx-get={ idURL("/sites", s.ID, "/ubah") } hx-target="#modal">Ubah &amp; Atur Peering</button>
-										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "generic")) } download>Enterprise Manual (.conf)</a>
-										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "mikrotik")) } download>MikroTik v7 (.rsc)</a>
-										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "fortigate")) } download>FortiGate (.conf)</a>
-										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "cisco")) } download>Cisco IOS-XE (.cfg)</a>
-										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "script")) } download>Script Linux (.sh)</a>
+										<button type="button" role="menuitem" hx-get={ idURL("/sites", s.ID, "/configure") } hx-target="#modal">Detail Site</button>
+										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "generic")) } download>Manual Configuration (.conf)</a>
 										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "swanctl")) } download>strongSwan (.conf)</a>
 										<a role="menuitem" href="/unduh/pki/ca.crt" download>Root CA (.crt)</a>
-										<button type="button" role="menuitem" hx-post={ idURL("/sites", s.ID, "/connect") } hx-target="#sites-table" hx-swap="outerHTML">Connect</button>
 										<button type="button" role="menuitem" hx-get={ idURL("/sites", s.ID, "/disconnect") } hx-target="#modal">Disconnect</button>
 										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/sites", s.ID, "/hapus") } hx-target="#modal">Hapus</button>
 									}
@@ -240,15 +234,18 @@ templ SiteForm(f Form) {
 }
 
 templ SiteConfigureModal(d SiteConfigureData) {
-	@ModalWide("Configure Site: " + d.Site.Name) {
+	@ModalWide("Detail Site: " + d.Site.Name) {
 		@ErrorBox(d.Err)
 		if d.Err == "" {
 			<div class="space-y-4 text-sm">
-				<div class="flex flex-wrap items-center gap-2">
-					<span class="font-semibold">{ d.Site.Name }</span>
-					@Badge(d.Site.OnlineLabel())
-					@Badge(d.Site.AuthLabel())
-					@Badge("FIPS IKEv2")
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="font-semibold">{ d.Site.Name }</span>
+						@Badge(d.Site.OnlineLabel())
+						@Badge(d.Site.AuthLabel())
+						@Badge("FIPS IKEv2")
+					</div>
+					<button type="button" hx-get={ idURL("/sites", d.Site.ID, "/ubah") } hx-target="#modal" class="rounded-full bg-[#2F6BC4] px-4 py-2 text-xs font-semibold text-white hover:bg-[#2559A8]">Ubah &amp; Atur Peering</button>
 				</div>
 				<div class="rounded-lg bg-[#F8F9FA] p-4 font-mono text-xs space-y-1">
 					<div><strong>Hub Public IP (Remote GW):</strong> { ternary(d.HubPublicIP != "", d.HubPublicIP, "—") } · UDP 500 &amp; 4500 (NAT-T)</div>
@@ -266,20 +263,16 @@ templ SiteConfigureModal(d SiteConfigureData) {
 					}
 				</div>
 				<div>
-					<div class="mb-2 text-xs font-semibold text-[#495057]">Unduh File Konfigurasi Sisi Perangkat (Berisi Parameter Lengkap + PSK/Setup)</div>
+					<div class="mb-2 text-xs font-semibold text-[#495057]">Unduh File Konfigurasi Sisi Perangkat (Berisi Parameter Lengkap + Kredensial)</div>
 					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "generic")) } download class="rounded-lg bg-[#2F6BC4] px-3 py-2.5 text-center font-semibold text-white hover:bg-[#2559A8]">Enterprise Manual / Switch / Firewall (.conf)</a>
-						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "mikrotik")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">MikroTik RouterOS v7 (.rsc)</a>
-						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "fortigate")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">FortiGate FortiOS (.conf)</a>
-						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "cisco")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Cisco IOS-XE (.cfg)</a>
-						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "script")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Linux Auto-Setup Script (.sh)</a>
-						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "swanctl")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Linux strongSwan (.conf)</a>
+						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "generic")) } download class="rounded-lg bg-[#2F6BC4] px-3 py-2.5 text-center font-semibold text-white hover:bg-[#2559A8]">Manual Configuration (.conf)</a>
+						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "swanctl")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">strongSwan (.conf)</a>
 					</div>
 				</div>
 				<div class="rounded-lg border border-[#DEE2E6] p-3">
 					<div class="mb-2 text-xs font-semibold text-[#495057]">Sertifikat X.509 (Root CA &amp; Sertifikat Site)</div>
 					<div class="flex flex-wrap gap-2">
-						<a href="/unduh/pki/ca.crt" download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Download Root CA (.crt)</a>
+						<a href="/unduh/pki/ca.crt" download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Root CA (.crt)</a>
 						<a href="/unduh/pki/ca.pem" download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Root CA (.pem)</a>
 						if d.Site.CertID != nil {
 							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.Site.CertID) + "/cert.crt") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Site Cert (.crt)</a>
@@ -289,7 +282,7 @@ templ SiteConfigureModal(d SiteConfigureData) {
 					</div>
 				</div>
 				<p class="rounded-md bg-[#E8EEF9] px-3 py-2 text-xs text-[#2C3E87]">
-					<strong>Zero-Touch Narrowing (Linux strongSwan):</strong> Script Linux (<code>.sh</code>) &amp; <code>swanctl.conf</code> memakai IKEv2 narrowing otomatis — saat Site-B..N atau C2S baru diizinkan mengakses site ini, Hub memicu renegosiasi otomatis tanpa perlu menjalankan ulang script di site ini. Untuk router statis (MikroTik / FortiGate / Cisco / Switch), unduh &amp; tambahkan subnet remote baru bila peering berubah.
+					<strong>Zero-Touch Narrowing (strongSwan):</strong> Konfigurasi <code>strongSwan (.conf)</code> memakai IKEv2 narrowing otomatis — saat Site-B..N atau C2S baru diizinkan mengakses site ini, Hub memicu renegosiasi otomatis tanpa mengubah konfigurasi di sisi site. Untuk perangkat router/firewall/switch statis, unduh ulang <code>Manual Configuration (.conf)</code> bila subnet remote berubah.
 				</p>
 			</div>
 		}
@@ -569,7 +562,7 @@ templ PKIContent(d PKIPageData) {
 										<div class="font-mono text-xs text-[#6C757D]">{ cert.SAN } · #{ cert.Serial }</div>
 									</td>
 									<td class="px-3 py-3">@Badge(cert.TargetType)</td>
-									<td class="px-3 py-3 font-mono text-xs">{ cert.NotAfter } ({ itoa(cert.DaysRemaining) }h)</td>
+									<td class="px-3 py-3 font-mono text-xs">{ cert.ValidityDisplay() }</td>
 									<td class="px-3 py-3">@Badge(cert.StatusLabel())</td>
 									<td class="px-3 py-3">
 										<div class="flex flex-wrap gap-1.5">
@@ -605,7 +598,15 @@ templ CertIssueForm(f Form) {
 					<option value="site" selected?={ f.V("target_type") == "site" }>Gateway Site S2S (clientAuth + serverAuth)</option>
 				</select>
 			</label>
-			@field("Masa Berlaku (hari)", "validity_days", ternary(f.V("validity_days") != "", f.V("validity_days"), "365"), "text", f.E("validity_days"), "1–1825 hari", true)
+			<div class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
+				<div class="text-sm font-semibold text-[#212529]">Masa Berlaku Sertifikat</div>
+				<input type="hidden" name="no_expiration" value="0"/>
+				<label class="flex items-center gap-2 text-sm font-semibold">
+					<input type="checkbox" name="no_expiration" value="on" checked?={ f.V("no_expiration") == "on" } class="h-4 w-4 accent-[#2F6BC4]"/>
+					<span>No Expiration (tanpa masa kedaluwarsa)</span>
+				</label>
+				@field("Masa Berlaku (hari)", "validity_days", ternary(f.V("validity_days") != "", f.V("validity_days"), "365"), "text", f.E("validity_days"), "1–3650 hari (diabaikan jika No Expiration dicentang)", false)
+			</div>
 			@formFooter("Terbitkan")
 		</form>
 	}

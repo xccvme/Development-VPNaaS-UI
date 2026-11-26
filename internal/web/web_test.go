@@ -144,7 +144,12 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		out(200, f.certs)
 	case path == "pki/certs" && r.Method == "POST":
 		f.nextID++
-		rec := map[string]any{"id": float64(f.nextID), "name": body["name"], "target_type": body["target_type"], "san": body["san"], "serial": "00AA", "not_after": "2027-01-01", "days_remaining": 365.0, "revoked": false}
+		noExp, _ := body["no_expiration"].(bool)
+		rec := map[string]any{"id": float64(f.nextID), "name": body["name"], "target_type": body["target_type"], "san": body["san"], "serial": "00AA", "not_after": "2027-01-01", "days_remaining": 365.0, "no_expiration": noExp, "revoked": false}
+		if noExp {
+			rec["not_after"] = "9999-12-31T23:59:59Z"
+			rec["days_remaining"] = nil
+		}
 		if rec["san"] == nil || rec["san"] == "" {
 			rec["san"] = strFromMap(body, "name") + "@vpnaas"
 		}
@@ -424,12 +429,12 @@ func TestPagesRenderAndEscape(t *testing.T) {
 		{"id": 10.0, "name": "site-jkt", "address": "203.0.113.5", "ike_id": "site-jkt@vpnaas", "subnets": "192.168.50.0/24", "enabled": true, "status": "active", "online": true, "last_connected_at": "2026-11-26T10:00:00Z"},
 	}
 	checks := map[string][]string{
-		"/ringkasan": {"Ringkasan", "Site-to-Site (S2S)", "Client-to-Site (C2S)", "Static Routing", "strongSwan swanctl"},
-		"/sites":     {"site-jkt", "203.0.113.5", "192.168.50.0/24", "Online", "2026-11-26T10:00:00Z", "Connect", "Disconnect"},
-		"/akun":      {"poc-client", "Enabled", "Disabled", "Online", "Offline", "10.250.0.4", "Split", "/unduh/akun/3/profil.json", "/unduh/akun/3/windows.ps1", "Setup-Client(windows).ps1"},
+		"/ringkasan": {"Dashboard", "Site-to-Site (S2S)", "Client-to-Site (C2S)", "Static Routing", "strongSwan swanctl"},
+		"/sites":     {"site-jkt", "203.0.113.5", "192.168.50.0/24", "Online", "2026-11-26T10:00:00Z", "Detail Site", "Manual Configuration (.conf)", "strongSwan (.conf)", "Root CA (.crt)", "Disconnect"},
+		"/akun":      {"poc-client", "Enabled", "Disabled", "Online", "Offline", "10.250.0.4", "Split", "Detail Akun", "/unduh/akun/3/manual.conf", "/unduh/akun/3/profil.json", "/unduh/akun/3/vpnaas-ca.crt"},
 		"/kebijakan": {"lan", "10.250.0.0/24", "TCP"},
 		"/status":    {"ESTABLISHED", "strongSwan swanctl", "pool-3"},
-		"/audit":     {"2026-11-13 20:15:11", "delete", "resource_id"},
+		"/audit":     {"Audit Log", "2026-11-13 20:15:11", "delete", "resource_id"},
 	}
 	for p, wants := range checks {
 		res, body := e.do("GET", p, nil, nil)

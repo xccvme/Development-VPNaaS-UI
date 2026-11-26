@@ -28,7 +28,7 @@ func OverviewPage(o Overview) templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = PageHeader("Ringkasan", "Gambaran langsung infrastruktur VPN Anda dari gateway.", PageRefresh("/ringkasan")).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = PageHeader("Dashboard", "Gambaran langsung infrastruktur VPN Anda dari gateway.", PageRefresh("/ringkasan")).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -452,7 +452,7 @@ func AuditPage(a Audit) templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = PageHeader("Audit", "Riwayat aktivitas control-plane (hanya metadata).", nil).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = PageHeader("Audit Log", "Riwayat aktivitas control-plane (hanya metadata).", nil).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

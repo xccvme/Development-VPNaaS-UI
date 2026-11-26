@@ -22,16 +22,23 @@ type Page struct {
 type NavItem struct{ Key, Label, Href, Icon string }
 
 var Nav = []NavItem{
-	{"ringkasan", "Ringkasan", "/ringkasan", "grid"},
-	{"sites", "Site-to-Site (S2S)", "/sites", "network"},
-	{"akun", "Client-to-Site (C2S)", "/akun", "user"},
-	{"grup", "Grup C2S", "/grup", "users"},
-	{"routing", "Static Routing", "/routing", "route"},
-	{"kebijakan", "Firewall", "/kebijakan", "shield"},
-	{"pki", "PKI & Sertifikat", "/pki", "key"},
-	{"tokens", "Token API", "/tokens", "lock"},
+	{"ringkasan", "Dashboard", "/ringkasan", "grid"},
+	{"vpnaas", "VPNaaS", "/sites", "network"},
 	{"status", "Status & Diagnostik", "/status", "pulse"},
-	{"audit", "Audit", "/audit", "clock"},
+	{"audit", "Audit Log", "/audit", "clock"},
+}
+
+func navActive(navKey, pageActive string) bool {
+	if navKey == pageActive {
+		return true
+	}
+	if navKey == "vpnaas" {
+		switch pageActive {
+		case "sites", "akun", "grup", "routing", "kebijakan", "pki":
+			return true
+		}
+	}
+	return false
 }
 
 type Flash struct {

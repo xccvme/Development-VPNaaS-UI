@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -18,6 +19,8 @@ const DefaultMaxSessions = 3
 var (
 	safeRe       = regexp.MustCompile(`^[A-Za-z0-9_@.:-]{1,128}$`)
 	credentialRe = regexp.MustCompile(`^[A-Za-z0-9_@.!+,:/=-]{8,128}$`)
+	hubPSKRe     = regexp.MustCompile(`^[A-Za-z0-9_@.!+,:/=-]{16,128}$`)
+	ifnameRe     = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,15}$`)
 	Protocols    = []string{"all", "tcp", "udp", "icmp"}
 )
 
@@ -35,6 +38,26 @@ func SplitList(s string) []string {
 		}
 	}
 	return out
+}
+
+func parseIntList(vals []string) ([]int, bool) {
+	out := []int{}
+	seen := map[int]bool{}
+	for _, raw := range vals {
+		s := strings.TrimSpace(raw)
+		if s == "" {
+			continue
+		}
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 {
+			return nil, false
+		}
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	return out, true
 }
 
 func ipv4CIDR(s string) bool {
@@ -66,15 +89,34 @@ func User(v url.Values, create bool) (map[string]any, Errors) {
 		errs["username"] = "Username 1-128 karakter: huruf, angka, _ @ . : -"
 	}
 	body["username"] = name
+
+	authMethod := get(v, "auth_method")
+	if authMethod != "" {
+		if authMethod != "eap-mschapv2" && authMethod != "pubkey" && authMethod != "eap-tls" {
+			errs["auth_method"] = "Metode auth harus eap-mschapv2, pubkey, atau eap-tls"
+		}
+		body["auth_method"] = authMethod
+	}
+	isCertAuth := authMethod == "pubkey" || authMethod == "eap-tls"
+	if isCertAuth {
+		cid, err := strconv.Atoi(get(v, "cert_id"))
+		if err != nil || cid < 1 {
+			errs["cert_id"] = "Sertifikat X.509 wajib dipilih untuk autentikasi sertifikat"
+		} else {
+			body["cert_id"] = cid
+		}
+	}
+
 	pw := v.Get("password")
 	if pw != "" {
 		if !credentialRe.MatchString(pw) {
 			errs["password"] = "Password 8-128 karakter: huruf, angka, _ @ . ! + , : / = -"
 		}
 		body["password"] = pw
-	} else if create {
+	} else if create && !isCertAuth {
 		errs["password"] = "Password wajib diisi saat membuat akun"
 	}
+
 	mode := v.Get("traffic_mode")
 	if mode == "" {
 		mode = "split"
@@ -83,6 +125,7 @@ func User(v url.Values, create bool) (map[string]any, Errors) {
 		errs["traffic_mode"] = "Mode trafik harus split atau full"
 	}
 	body["traffic_mode"] = mode
+
 	if raw, present := v["max_sessions"]; present || create {
 		ms := ""
 		if present {
@@ -97,10 +140,72 @@ func User(v url.Values, create bool) (map[string]any, Errors) {
 			errs["max_sessions"] = "Maks. koneksi bersamaan harus 1, 2, atau 3"
 		}
 	}
-	// Empty allowed CIDRs are omitted so the backend applies its LAN default
-	// (create) or keeps the stored value (edit).
+
+	hasSitesField := false
+	var allowedSites []int
+	if _, ok := v["allowed_sites_present"]; ok || len(v["allowed_sites"]) > 0 {
+		hasSitesField = true
+		var okIDs bool
+		allowedSites, okIDs = parseIntList(v["allowed_sites"])
+		if !okIDs {
+			errs["allowed_sites"] = "ID site tidak valid"
+		} else {
+			body["allowed_sites"] = allowedSites
+		}
+	}
+
+	hasGroupsField := false
+	var groupIDs []int
+	if _, ok := v["groups_present"]; ok || len(v["groups"]) > 0 {
+		hasGroupsField = true
+		var okIDs bool
+		groupIDs, okIDs = parseIntList(v["groups"])
+		if !okIDs {
+			errs["groups"] = "ID grup tidak valid"
+		} else {
+			body["groups"] = groupIDs
+		}
+	}
+
+	// Empty allowed CIDRs:
+	// - When allow_vpc_present is submitted by the UI form, toggle the server's vpc_cidr cleanly in/out of allowed_cidrs.
+	// - When user explicitly chose allowed_sites or groups with blank CIDRs, send [] so user gets ONLY selected sites/groups (no forced VPC).
+	// - Otherwise omit so backend applies its LAN default (create) or keeps stored value (edit).
 	cidrs := SplitList(v.Get("allowed_cidrs"))
-	if len(cidrs) == 0 {
+	if _, hasVPCField := v["allow_vpc_present"]; hasVPCField {
+		vpcCIDR := get(v, "vpc_cidr")
+		if vpcCIDR == "" {
+			vpcCIDR = DefaultLAN
+		}
+		wantVPC := Checkbox(v, "allow_vpc", false)
+		if wantVPC && ipv4CIDR(vpcCIDR) {
+			found := false
+			for _, c := range cidrs {
+				if c == vpcCIDR {
+					found = true
+					break
+				}
+			}
+			if !found {
+				cidrs = append([]string{vpcCIDR}, cidrs...)
+			}
+		} else if !wantVPC && vpcCIDR != "" {
+			filtered := []string{}
+			for _, c := range cidrs {
+				if c != vpcCIDR {
+					filtered = append(filtered, c)
+				}
+			}
+			cidrs = filtered
+		}
+		if len(cidrs) == 0 && len(allowedSites) == 0 && len(groupIDs) == 0 {
+			errs["allowed_cidrs"] = "Pilih minimal satu tujuan akses: VPC server, Allowed CIDRs, Multi-Site S2S, atau Grup C2S"
+			return body, errs
+		}
+	} else if len(cidrs) == 0 {
+		if (hasSitesField && len(allowedSites) > 0) || (hasGroupsField && len(groupIDs) > 0) {
+			body["allowed_cidrs"] = []string{}
+		}
 		return body, errs
 	}
 	if len(cidrs) > 16 {
@@ -139,8 +244,6 @@ func Connection(v url.Values, create bool) (map[string]any, Errors) {
 		}
 		body["remote_id"] = rid
 	}
-	// Blank local subnets are omitted: the backend applies its LAN default
-	// on create and keeps the stored value on edit.
 	if local := SplitList(v.Get("local_ts")); len(local) > 0 {
 		if msg := selectorError(local); msg != "" {
 			errs["local_ts"] = msg
@@ -222,9 +325,7 @@ func overlaps(a, b []string) string {
 	return ""
 }
 
-// Hub builds a VPN Hub (topology "hub") POST/PUT body from site_a_*/site_b_*
-// fields. Empty address -> %any; empty IKE ID omitted (backend default);
-// PSK write-only: empty is omitted (generate on create, keep on edit).
+// Hub builds a VPN Hub (topology "hub") POST/PUT body from site_a_*/site_b_* fields.
 func Hub(v url.Values, create bool) (map[string]any, Errors) {
 	errs := Errors{}
 	body := map[string]any{"enabled": enabled(v), "topology": "hub"}
@@ -282,6 +383,216 @@ func Hub(v url.Values, create bool) (map[string]any, Errors) {
 	return body, errs
 }
 
+// MultiSite builds a v2.0 /api/sites POST/PUT body with peer_sites and allow_vpc.
+func MultiSite(v url.Values, create bool) (map[string]any, Errors) {
+	errs := Errors{}
+	body := map[string]any{
+		"enabled":   enabled(v),
+		"nat":       Checkbox(v, "nat", true),
+		"encap":     Checkbox(v, "encap", true),
+		"allow_vpc": Checkbox(v, "allow_vpc", true),
+	}
+	name := get(v, "name")
+	if !safeRe.MatchString(name) {
+		errs["name"] = "Nama site 1-128 karakter: huruf, angka, _ @ . : -"
+	}
+	body["name"] = name
+
+	addr := get(v, "address")
+	if addr == "" {
+		addr = AnyAddress
+	}
+	if !validSpokeAddress(addr) {
+		errs["address"] = "Alamat harus IPv4, hostname, atau kosong (%any)"
+	}
+	body["address"] = addr
+
+	if id := get(v, "ike_id"); id != "" {
+		if !safeRe.MatchString(id) {
+			errs["ike_id"] = "IKE ID hanya huruf, angka, _ @ . : -"
+		}
+		body["ike_id"] = id
+	}
+
+	authMethod := get(v, "auth_method")
+	if authMethod == "" {
+		authMethod = "psk"
+	}
+	if authMethod != "psk" && authMethod != "pubkey" {
+		errs["auth_method"] = "Metode auth harus psk atau pubkey"
+	}
+	body["auth_method"] = authMethod
+	if authMethod == "psk" {
+		if psk := v.Get("psk"); psk != "" {
+			if !hubPSKRe.MatchString(psk) {
+				errs["psk"] = "PSK minimal 16 karakter aman (A-Z a-z 0-9 _ @ . ! + , : / = -)"
+			}
+			body["psk"] = psk
+		}
+	} else {
+		cid, err := strconv.Atoi(get(v, "cert_id"))
+		if err != nil || cid < 1 {
+			errs["cert_id"] = "Sertifikat site wajib dipilih untuk auth X.509"
+		} else {
+			body["cert_id"] = cid
+		}
+	}
+
+	subnets := SplitList(v.Get("subnets"))
+	if len(subnets) == 0 {
+		errs["subnets"] = "Subnet LAN site wajib diisi"
+	} else if len(subnets) > 16 {
+		errs["subnets"] = "Maksimal 16 subnet"
+	} else {
+		for _, c := range subnets {
+			if !ipv4CIDR(c) {
+				errs["subnets"] = "CIDR IPv4 tidak valid: " + c
+				break
+			}
+			if p, err := netip.ParsePrefix(c); err == nil && p.Bits() == 0 {
+				errs["subnets"] = "Default route (/0) tidak didukung: " + c
+				break
+			}
+		}
+	}
+	body["subnets"] = strings.Join(subnets, ",")
+
+	peers, okPeers := parseIntList(v["peer_sites"])
+	if !okPeers {
+		errs["peer_sites"] = "Peer site tidak valid"
+	} else {
+		body["peer_sites"] = peers
+	}
+
+	if dpdStr := get(v, "dpd_delay"); dpdStr != "" {
+		dpd, err := strconv.Atoi(dpdStr)
+		if err != nil || dpd < 10 || dpd > 300 {
+			errs["dpd_delay"] = "DPD delay harus 10–300 detik"
+		} else {
+			body["dpd_delay"] = dpd
+		}
+	}
+	if ikeP := get(v, "ike_proposals"); ikeP != "" {
+		body["ike_proposals"] = ikeP
+	}
+	if espP := get(v, "esp_proposals"); espP != "" {
+		body["esp_proposals"] = espP
+	}
+	if _, hasDesc := v["description"]; hasDesc {
+		body["description"] = get(v, "description")
+	}
+	return body, errs
+}
+
+// Group builds a v2.0 /api/groups POST/PUT body.
+func Group(v url.Values) (map[string]any, Errors) {
+	errs := Errors{}
+	body := map[string]any{"enabled": enabled(v)}
+	name := get(v, "name")
+	if !safeRe.MatchString(name) {
+		errs["name"] = "Nama grup 1-128 karakter: huruf, angka, _ @ . : -"
+	}
+	body["name"] = name
+	body["description"] = get(v, "description")
+
+	cidrs := SplitList(v.Get("allowed_cidrs"))
+	if len(cidrs) > 16 {
+		errs["allowed_cidrs"] = "Maksimal 16 CIDR"
+	}
+	for _, c := range cidrs {
+		if !ipv4CIDR(c) {
+			errs["allowed_cidrs"] = "CIDR IPv4 tidak valid: " + c
+			break
+		}
+		if p, err := netip.ParsePrefix(c); err == nil && p.Bits() == 0 {
+			errs["allowed_cidrs"] = "Default route (/0) tidak didukung"
+			break
+		}
+	}
+	body["allowed_cidrs"] = cidrs
+
+	sites, ok := parseIntList(v["allowed_sites"])
+	if !ok {
+		errs["allowed_sites"] = "Site tidak valid"
+	} else {
+		body["allowed_sites"] = sites
+	}
+	return body, errs
+}
+
+// Route builds a v2.0 /api/routes POST/PUT body.
+func Route(v url.Values) (map[string]any, Errors) {
+	errs := Errors{}
+	body := map[string]any{"enabled": enabled(v)}
+	name := get(v, "name")
+	if !safeRe.MatchString(name) {
+		errs["name"] = "Nama route 1-128 karakter: huruf, angka, _ @ . : -"
+	}
+	body["name"] = name
+
+	dst := get(v, "destination_cidr")
+	if !ipv4CIDR(dst) {
+		errs["destination_cidr"] = "Destination CIDR IPv4 tidak valid"
+	} else if p, err := netip.ParsePrefix(dst); err == nil && p.Bits() == 0 {
+		errs["destination_cidr"] = "Default route (/0) tidak didukung"
+	}
+	body["destination_cidr"] = dst
+
+	gw := get(v, "gateway")
+	if gw != "" {
+		a, err := netip.ParseAddr(gw)
+		if err != nil || !a.Is4() || gw == "0.0.0.0" {
+			errs["gateway"] = "Gateway harus IPv4 valid"
+		} else {
+			body["gateway"] = gw
+		}
+	} else {
+		body["gateway"] = nil
+	}
+
+	iface := get(v, "interface")
+	if iface != "" {
+		if !ifnameRe.MatchString(iface) || iface == "lo" {
+			errs["interface"] = "Nama interface tidak valid"
+		} else {
+			body["interface"] = iface
+		}
+	} else {
+		body["interface"] = nil
+	}
+
+	siteStr := get(v, "site_id")
+	if siteStr != "" {
+		sid, err := strconv.Atoi(siteStr)
+		if err != nil || sid < 1 {
+			errs["site_id"] = "Site tidak valid"
+		} else {
+			body["site_id"] = sid
+		}
+	} else {
+		body["site_id"] = nil
+	}
+
+	if gw == "" && iface == "" && siteStr == "" {
+		errs["gateway"] = "Isi minimal salah satu: Gateway, Interface, atau Site tujuan"
+	}
+
+	metric := 100
+	if mStr := get(v, "metric"); mStr != "" {
+		m, err := strconv.Atoi(mStr)
+		if err != nil || m < 1 || m > 65535 {
+			errs["metric"] = "Metric harus 1–65535"
+		} else {
+			metric = m
+		}
+	}
+	body["metric"] = metric
+	if _, hasDesc := v["description"]; hasDesc {
+		body["description"] = get(v, "description")
+	}
+	return body, errs
+}
+
 func selectorError(cidrs []string) string {
 	if len(cidrs) > MaxSelectors {
 		return "Maksimal 8 subnet"
@@ -305,13 +616,55 @@ func Policy(v url.Values) (map[string]any, Errors) {
 		errs["name"] = "Nama 1-128 karakter: huruf, angka, _ @ . : -"
 	}
 	body["name"] = name
-	for _, k := range []string{"source_cidr", "destination_cidr"} {
-		c := get(v, k)
-		if !ipv4CIDR(c) {
-			errs[k] = "CIDR IPv4 tidak valid"
+
+	srcType := get(v, "source_type")
+	if srcType != "" && srcType != "cidr" {
+		if srcType != "site" && srcType != "user" && srcType != "group" {
+			errs["source_type"] = "Tipe source tidak valid"
 		}
-		body[k] = c
+		body["source_type"] = srcType
+		ref, err := strconv.Atoi(get(v, "source_ref"))
+		if err != nil || ref < 1 {
+			errs["source_ref"] = "Pilih entitas source"
+		} else {
+			body["source_ref"] = ref
+		}
+	} else {
+		if srcType == "cidr" {
+			body["source_type"] = "cidr"
+		}
+		c := get(v, "source_cidr")
+		if !ipv4CIDR(c) {
+			errs["source_cidr"] = "CIDR IPv4 tidak valid"
+		}
+		body["source_cidr"] = c
 	}
+
+	dstType := get(v, "destination_type")
+	if dstType != "" && dstType != "cidr" {
+		if dstType != "site" && dstType != "vpc" {
+			errs["destination_type"] = "Tipe destination tidak valid"
+		}
+		body["destination_type"] = dstType
+		if dstType == "site" {
+			ref, err := strconv.Atoi(get(v, "destination_ref"))
+			if err != nil || ref < 1 {
+				errs["destination_ref"] = "Pilih site tujuan"
+			} else {
+				body["destination_ref"] = ref
+			}
+		}
+	} else {
+		if dstType == "cidr" {
+			body["destination_type"] = "cidr"
+		}
+		c := get(v, "destination_cidr")
+		if !ipv4CIDR(c) {
+			errs["destination_cidr"] = "CIDR IPv4 tidak valid"
+		}
+		body["destination_cidr"] = c
+	}
+
 	proto := get(v, "protocol")
 	if proto == "" {
 		proto = "all"
@@ -324,6 +677,29 @@ func Policy(v url.Values) (map[string]any, Errors) {
 		errs["protocol"] = "Protokol harus all, tcp, udp, atau icmp"
 	}
 	body["protocol"] = proto
+
+	if action := get(v, "action"); action != "" {
+		if action != "allow" && action != "deny" {
+			errs["action"] = "Action harus allow atau deny"
+		}
+		body["action"] = action
+	}
+	if ports := get(v, "ports"); ports != "" {
+		if proto != "tcp" && proto != "udp" {
+			errs["ports"] = "Ports hanya berlaku untuk protokol TCP atau UDP"
+		}
+		body["ports"] = ports
+	} else if _, present := v["ports"]; present {
+		body["ports"] = nil
+	}
+	if prioStr := get(v, "priority"); prioStr != "" {
+		prio, err := strconv.Atoi(prioStr)
+		if err != nil || prio < 1 || prio > 10000 {
+			errs["priority"] = "Priority harus 1–10000"
+		} else {
+			body["priority"] = prio
+		}
+	}
 	return body, errs
 }
 

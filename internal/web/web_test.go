@@ -27,6 +27,11 @@ type fakeAPI struct {
 	users     []map[string]any
 	conns     []map[string]any
 	policies  []map[string]any
+	sites     []map[string]any
+	groups    []map[string]any
+	routes    []map[string]any
+	certs     []map[string]any
+	tokens    []map[string]any
 	nextID    int
 	calls     []string
 	bodies    []map[string]any
@@ -46,7 +51,17 @@ func newFake() *fakeAPI {
 				"site_a": map[string]any{"name": "jakarta", "address": "%any", "id": "kantor-a@vpnaas", "psk_set": true, "subnets": "192.168.10.0/24,192.168.11.0/24", "nat": true, "status": "active", "remote_host": "203.0.113.20", "bytes_in": 10.0, "bytes_out": 20.0},
 				"site_b": map[string]any{"name": "surabaya", "address": "203.0.113.30", "id": "kantor-b@vpnaas", "psk_set": true, "subnets": "192.168.20.0/24", "nat": false, "status": "down"}}},
 		policies: []map[string]any{{"id": 5.0, "name": "lan", "source_cidr": "10.250.0.0/24", "destination_cidr": "10.10.7.0/24", "protocol": "tcp", "enabled": true}},
+		sites:    []map[string]any{},
+		groups:   []map[string]any{},
+		routes:   []map[string]any{},
+		certs:    []map[string]any{},
+		tokens:   []map[string]any{},
 	}
+}
+
+func strFromMap(m map[string]any, k string) string {
+	s, _ := m[k].(string)
+	return s
 }
 
 func (f *fakeAPI) list(kind string) *[]map[string]any {
@@ -55,6 +70,14 @@ func (f *fakeAPI) list(kind string) *[]map[string]any {
 		return &f.users
 	case "connections":
 		return &f.conns
+	case "sites":
+		return &f.sites
+	case "groups":
+		return &f.groups
+	case "routes":
+		return &f.routes
+	case "tokens":
+		return &f.tokens
 	}
 	return &f.policies
 }
@@ -92,7 +115,92 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		out(200, map[string]any{"raw": f.statusRaw, "connections": "user-3: IKEv2\n", "pools": "pool-3\n", "backend": "strongSwan swanctl"})
 	case path == "audit":
 		out(200, []any{map[string]any{"id": 1, "timestamp": "2026-11-13 20:15:11", "action": "delete", "resource": "users", "resource_id": 12}})
+	case path == "ready":
+		out(200, map[string]any{"ready": true, "checks": map[string]any{"strongswan": true, "nftables": true}})
+	case path == "gateway":
+		out(200, map[string]any{"engine": "strongSwan 6", "api_version": "2.0.0", "public_ip": "192.0.2.10", "public_if": "ens3", "lan_cidr": "10.10.7.0/24", "pool_cidr": "172.31.201.0/24", "region": "id-jkt-1"})
+	case path == "logs":
+		f.queries = append(f.queries, r.URL.RawQuery)
+		out(200, map[string]any{"source": r.URL.Query().Get("source"), "lines": []any{"charon[100]: IKE_SA established [REDACTED]"}})
+	case path == "diagnostics/check" && r.Method == "POST":
+		out(200, map[string]any{"target": body["target"], "reachable_via": "site-n-1", "allowed": true})
+	case path == "routes/live":
+		out(200, map[string]any{"kernel_available": true, "static_routes": f.routes, "kernel_routes": []any{}})
+	case path == "pki/ca":
+		out(200, map[string]any{"present": true, "subject": "CN=VPNaaS Root CA", "not_after": "2036-01-01", "days_remaining": 3650, "sha256_fingerprint": "AA:BB:CC"})
+	case path == "pki/ca/cert":
+		w.Header().Set("Content-Type", "application/x-pem-file")
+		w.WriteHeader(200)
+		w.Write([]byte("-----BEGIN CERTIFICATE-----\nQ0E=\n-----END CERTIFICATE-----\n"))
+	case path == "pki/crl":
+		w.Header().Set("Content-Type", "application/pkix-crl")
+		w.WriteHeader(200)
+		w.Write([]byte("-----BEGIN X509 CRL-----\nQ1JM\n-----END X509 CRL-----\n"))
+	case path == "pki/server":
+		out(200, map[string]any{"present": true, "subject": "CN=192.0.2.10", "san_ips": []any{"192.0.2.10"}, "san_dns": []any{}, "not_after": "2027-01-01", "days_remaining": 365})
+	case path == "pki/server/rotate" && r.Method == "POST":
+		out(200, map[string]any{"rotated": true})
+	case path == "pki/certs" && r.Method == "GET":
+		out(200, f.certs)
+	case path == "pki/certs" && r.Method == "POST":
+		f.nextID++
+		rec := map[string]any{"id": float64(f.nextID), "name": body["name"], "target_type": body["target_type"], "san": body["san"], "serial": "00AA", "not_after": "2027-01-01", "days_remaining": 365.0, "revoked": false}
+		if rec["san"] == nil || rec["san"] == "" {
+			rec["san"] = strFromMap(body, "name") + "@vpnaas"
+		}
+		f.certs = append(f.certs, rec)
+		out(201, rec)
+	case len(parts) == 4 && parts[0] == "pki" && parts[1] == "certs" && parts[3] == "revoke" && r.Method == "POST":
+		id, _ := strconv.Atoi(parts[2])
+		for _, c := range f.certs {
+			if int(c["id"].(float64)) == id {
+				c["revoked"] = true
+			}
+		}
+		out(200, map[string]any{"revoked": true})
+	case len(parts) == 4 && parts[0] == "pki" && parts[1] == "certs" && parts[3] == "bundle" && r.Method == "GET":
+		f.queries = append(f.queries, r.URL.RawQuery)
+		if r.URL.Query().Get("format") == "p12" {
+			w.Header().Set("Content-Type", "application/x-pkcs12")
+			w.Header().Set("Content-Disposition", `attachment; filename="cert-`+parts[2]+`.p12"`)
+			w.WriteHeader(200)
+			w.Write([]byte("PK12DATA"))
+		} else {
+			out(200, map[string]any{"certificate": "PEM-CERT", "private_key": "PEM-KEY", "ca_certificate": "PEM-CA"})
+		}
+	case len(parts) == 3 && parts[0] == "sites" && parts[2] == "config":
+		f.queries = append(f.queries, r.URL.RawQuery)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="site-`+parts[1]+`-`+r.URL.Query().Get("vendor")+`.cfg"`)
+		w.WriteHeader(200)
+		w.Write([]byte("# vendor=" + r.URL.Query().Get("vendor") + " site=" + parts[1] + "\n"))
+	case len(parts) == 3 && parts[0] == "sites" && (parts[2] == "connect" || parts[2] == "disconnect") && r.Method == "POST":
+		out(200, map[string]any{"ok": true, "output": "site-n-" + parts[1] + " " + parts[2] + " ok"})
+	case len(parts) == 3 && parts[0] == "users" && parts[2] == "disconnect" && r.Method == "POST":
+		out(200, map[string]any{"disconnected": 1})
+	case len(parts) == 5 && parts[0] == "users" && parts[2] == "sessions" && parts[4] == "disconnect" && r.Method == "POST":
+		out(200, map[string]any{"disconnected": true})
+	case path == "tokens" && r.Method == "POST":
+		f.nextID++
+		rec := map[string]any{"id": float64(f.nextID), "name": body["name"], "role": body["role"], "prefix": "vpnaas_test", "revoked": false, "token": "vpnaas_test_SECRET_ONCE"}
+		f.tokens = append(f.tokens, rec)
+		out(201, rec)
 	case len(parts) == 3 && parts[0] == "users" && parts[2] == "profile":
+		f.queries = append(f.queries, r.URL.RawQuery)
+		switch r.URL.Query().Get("format") {
+		case "mobileconfig":
+			w.Header().Set("Content-Type", "application/x-apple-aspen-config")
+			w.Header().Set("Content-Disposition", `attachment; filename="VPNaaS-poc-client.mobileconfig"`)
+			w.WriteHeader(200)
+			w.Write([]byte("<?xml version=\"1.0\"?><plist><dict/></plist>"))
+			return
+		case "sswan":
+			w.Header().Set("Content-Type", "application/vnd.strongswan.profile+json")
+			w.Header().Set("Content-Disposition", `attachment; filename="VPNaaS-poc-client.sswan"`)
+			w.WriteHeader(200)
+			w.Write([]byte(`{"uuid":"1234","name":"VPNaaS-poc-client"}`))
+			return
+		}
 		w.Header().Set("Content-Disposition", `attachment; filename="user-`+parts[1]+`.json"`)
 		out(200, map[string]any{"username": "poc-client", "password": "DO-NOT-EXPORT", "traffic_mode": "split", "server": "192.0.2.10", "server_id": "192.0.2.10", "allowed_cidrs": []any{"10.10.7.0/24"}, "ca_certificate": "-----BEGIN CERTIFICATE-----\nY2VydA==\n-----END CERTIFICATE-----\n"})
 	case len(parts) == 5 && parts[0] == "connections" && parts[2] == "sites" && parts[4] == "config":

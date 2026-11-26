@@ -252,3 +252,104 @@ func TestHubEditKeepsPSK(t *testing.T) {
 		}
 	}
 }
+
+func TestMultiSiteForm(t *testing.T) {
+	v := vals(
+		"name", "site-b", "address", "", "subnets", "192.168.20.0/24\n192.168.21.0/24",
+		"allow_vpc", "0", "allow_vpc", "on", "nat", "0", "encap", "0", "encap", "on",
+		"peer_sites", "1", "peer_sites", "3", "auth_method", "psk", "enabled", "on",
+	)
+	body, errs := MultiSite(v, true)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errs: %v", errs)
+	}
+	if body["address"] != "%any" || body["allow_vpc"] != true || body["nat"] != false || body["encap"] != true {
+		t.Fatalf("unexpected booleans/address: %#v", body)
+	}
+	if !reflect.DeepEqual(body["peer_sites"], []int{1, 3}) {
+		t.Fatalf("peer_sites: %#v", body["peer_sites"])
+	}
+	if body["subnets"] != "192.168.20.0/24,192.168.21.0/24" {
+		t.Fatalf("subnets: %#v", body["subnets"])
+	}
+	// pubkey requires cert_id
+	v2 := vals("name", "site-c", "subnets", "192.168.30.0/24", "auth_method", "pubkey")
+	if _, errs := MultiSite(v2, true); errs["cert_id"] == "" {
+		t.Fatalf("pubkey without cert_id should fail: %v", errs)
+	}
+}
+
+func TestUserV2SiteOnlyAndCombo(t *testing.T) {
+	// Site-only: blank allowed_cidrs + allowed_sites=[1] must send allowed_cidrs: []string{} (not omitted!)
+	v := vals("username", "site-only", "password", "Secret-123", "allowed_cidrs", "", "allowed_sites_present", "1", "allowed_sites", "1", "enabled", "on")
+	body, errs := User(v, true)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errs: %v", errs)
+	}
+	if cidrs, ok := body["allowed_cidrs"].([]string); !ok || len(cidrs) != 0 {
+		t.Fatalf("site-only must send explicit empty allowed_cidrs slice: %#v", body["allowed_cidrs"])
+	}
+	if !reflect.DeepEqual(body["allowed_sites"], []int{1}) {
+		t.Fatalf("allowed_sites: %#v", body["allowed_sites"])
+	}
+	// Pubkey/EAP-TLS user does not require password
+	vCert := vals("username", "cert-user", "auth_method", "pubkey", "cert_id", "7", "enabled", "on")
+	body, errs = User(vCert, true)
+	if len(errs) != 0 || body["auth_method"] != "pubkey" || body["cert_id"] != 7 {
+		t.Fatalf("cert user failed: %v %#v", errs, body)
+	}
+	// UI allow_vpc checkbox toggling:
+	// 1. Edit VPC+Site -> Site-only by unchecking allow_vpc strips vpc_cidr even if present in allowed_cidrs textarea
+	vStrip := vals("username", "u1", "allow_vpc_present", "1", "vpc_cidr", "10.10.7.0/24", "allow_vpc", "0", "allowed_cidrs", "10.10.7.0/24", "allowed_sites_present", "1", "allowed_sites", "2", "enabled", "on")
+	body, errs = User(vStrip, false)
+	if len(errs) != 0 || !reflect.DeepEqual(body["allowed_cidrs"], []string{}) || !reflect.DeepEqual(body["allowed_sites"], []int{2}) {
+		t.Fatalf("uncheck allow_vpc failed: %v %#v", errs, body)
+	}
+	// 2. Edit Site-only -> VPC-only by checking allow_vpc adds vpc_cidr cleanly
+	vAddVPC := vals("username", "u1", "allow_vpc_present", "1", "vpc_cidr", "10.10.7.0/24", "allow_vpc", "0", "allow_vpc", "on", "allowed_cidrs", "", "allowed_sites_present", "1", "enabled", "on")
+	body, errs = User(vAddVPC, false)
+	if len(errs) != 0 || !reflect.DeepEqual(body["allowed_cidrs"], []string{"10.10.7.0/24"}) || !reflect.DeepEqual(body["allowed_sites"], []int{}) {
+		t.Fatalf("check allow_vpc failed: %v %#v", errs, body)
+	}
+	// 3. Unchecking everything returns validation error
+	vNone := vals("username", "u1", "allow_vpc_present", "1", "vpc_cidr", "10.10.7.0/24", "allow_vpc", "0", "allowed_cidrs", "", "allowed_sites_present", "1")
+	if _, errs := User(vNone, false); errs["allowed_cidrs"] == "" {
+		t.Fatalf("expected error when no destination selected")
+	}
+}
+
+func TestPolicyV2AndGroupRouteForms(t *testing.T) {
+	body, errs := Policy(vals(
+		"name", "deny-db", "action", "deny", "priority", "10",
+		"source_type", "site", "source_ref", "2",
+		"destination_type", "site", "destination_ref", "1",
+		"protocol", "tcp", "ports", "5432,3306", "enabled", "on",
+	))
+	if len(errs) != 0 {
+		t.Fatalf("policy v2 errs: %v", errs)
+	}
+	if body["action"] != "deny" || body["priority"] != 10 || body["source_type"] != "site" || body["source_ref"] != 2 || body["destination_ref"] != 1 || body["ports"] != "5432,3306" {
+		t.Fatalf("policy v2 body: %#v", body)
+	}
+	// Clearing ports when switching to protocol=all sends explicit nil so backend clears old ports
+	pClear, pErrs := Policy(vals("name", "deny-db", "source_cidr", "10.1.0.0/24", "destination_cidr", "10.2.0.0/24", "protocol", "all", "ports", ""))
+	if len(pErrs) != 0 {
+		t.Fatalf("policy clear ports errs: %v", pErrs)
+	}
+	if v, has := pClear["ports"]; !has || v != nil {
+		t.Fatalf("expected explicit nil ports on clear, got %#v", pClear)
+	}
+
+	gbody, gerrs := Group(vals("name", "devops", "allowed_cidrs", "10.10.7.0/24", "allowed_sites", "1", "allowed_sites", "2", "enabled", "on"))
+	if len(gerrs) != 0 || !reflect.DeepEqual(gbody["allowed_sites"], []int{1, 2}) {
+		t.Fatalf("group: %v %#v", gerrs, gbody)
+	}
+
+	rbody, rerrs := Route(vals("name", "to-db", "destination_cidr", "10.120.0.0/24", "gateway", "10.10.7.1", "metric", "50", "enabled", "on"))
+	if len(rerrs) != 0 || rbody["metric"] != 50 || rbody["gateway"] != "10.10.7.1" {
+		t.Fatalf("route: %v %#v", rerrs, rbody)
+	}
+	if _, rerrs := Route(vals("name", "bad", "destination_cidr", "0.0.0.0/0", "gateway", "10.10.7.1")); rerrs["destination_cidr"] == "" {
+		t.Fatal("default route 0.0.0.0/0 should be rejected")
+	}
+}

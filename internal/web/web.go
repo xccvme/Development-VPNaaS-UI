@@ -137,9 +137,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /unduh/akun/{id}/vpnaas-ca.crt", s.authed(s.downloadCertificate))
 	s.mux.HandleFunc("GET /unduh/akun/{id}/profil.json", s.authed(s.downloadProfile))
 	s.mux.HandleFunc("GET /unduh/akun/{id}/windows.ps1", s.authed(s.downloadWindows))
+	s.mux.HandleFunc("GET /unduh/akun/{id}/apple.mobileconfig", s.authed(s.downloadUserFormat("mobileconfig", "application/x-apple-aspen-config", "VPNaaS-", ".mobileconfig")))
+	s.mux.HandleFunc("GET /unduh/akun/{id}/android.sswan", s.authed(s.downloadUserFormat("sswan", "application/vnd.strongswan.profile+json", "VPNaaS-", ".sswan")))
 	s.mux.HandleFunc("GET /unduh/koneksi/{id}/{site}/{file}", s.authed(s.downloadHubSite))
 	s.mux.HandleFunc("GET /downloads/users/{id}/windows.ps1", s.authed(s.downloadWindows)) // legacy URL
 
+	s.routesV2()
 	s.mux.HandleFunc("/api/{path...}", s.proxy)
 }
 
@@ -382,19 +385,21 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, sess auth.Sess
 	defer cancel()
 	var ov map[string]any
 	var policies []model.Policy
+	var sites []model.MultiSite
 	var oerr, perr error
 	var users []model.User
 	var uerr string
 	var conns []views.ConnRow
 	var cerr, serr string
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(5)
 	go func() { defer wg.Done(); _, oerr = s.up.JSON(ctx, "GET", "overview", nil, &ov) }()
 	go func() { defer wg.Done(); _, perr = s.up.JSON(ctx, "GET", "policies", nil, &policies) }()
 	go func() { defer wg.Done(); users, uerr, _ = s.fetchUsers(r) }()
 	go func() { defer wg.Done(); conns, cerr, serr = s.fetchConnections(r) }()
+	go func() { defer wg.Done(); _, _ = s.up.JSON(ctx, "GET", "sites", nil, &sites) }()
 	wg.Wait()
-	o := views.Overview{Connections: conns, Users: users}
+	o := views.Overview{Connections: conns, Sites: sites, Users: users}
 	count := func(n int, err string) string {
 		if err != "" {
 			return "—"
@@ -471,9 +476,40 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, sess auth.Sess
 func (s *Server) status(w http.ResponseWriter, r *http.Request, sess auth.Session) {
 	ctx, cancel := s.ctx(r)
 	defer cancel()
-	var st map[string]any
-	_, err := s.up.JSON(ctx, "GET", "status", nil, &st)
-	s.page(w, r, sess, "status", "Status Runtime", views.StatusPage(kvs(st), errText(err)))
+	var st, rdy, gw map[string]any
+	var logsResp struct {
+		Lines []string `json:"lines"`
+	}
+	var users []model.User
+	var sites []model.MultiSite
+	var err, rerr, lerr error
+	var wg sync.WaitGroup
+	wg.Add(6)
+	go func() { defer wg.Done(); _, err = s.up.JSON(ctx, "GET", "status", nil, &st) }()
+	go func() { defer wg.Done(); _, rerr = s.up.JSON(ctx, "GET", "ready", nil, &rdy) }()
+	go func() { defer wg.Done(); _, _ = s.up.JSON(ctx, "GET", "gateway", nil, &gw) }()
+	go func() { defer wg.Done(); _, lerr = s.up.JSON(ctx, "GET", "logs", nil, &logsResp) }()
+	go func() { defer wg.Done(); _, _ = s.up.JSON(ctx, "GET", "users", nil, &users) }()
+	go func() { defer wg.Done(); _, _ = s.up.JSON(ctx, "GET", "sites", nil, &sites) }()
+	wg.Wait()
+	d := views.StatusViewData{
+		Ready:     rdy,
+		Gateway:   gw,
+		Items:     kvs(st),
+		Err:       errText(err),
+		ReadyErr:  errText(rerr),
+		LogSource: "strongswan",
+		LogLines:  logsResp.Lines,
+		LogErr:    errText(lerr),
+		Users:     users,
+		Sites:     sites,
+	}
+	// If backend doesn't expose v2 /ready & /gateway (e.g. legacy mock), hide benign 404 on ReadyErr/LogErr
+	if rdy == nil && gw == nil {
+		d.ReadyErr = ""
+		d.LogErr = ""
+	}
+	s.page(w, r, sess, "status", "Status Runtime", views.StatusV2Page(d))
 }
 
 func (s *Server) audit(w http.ResponseWriter, r *http.Request, sess auth.Session) {
@@ -522,10 +558,11 @@ func (s *Server) connections(w http.ResponseWriter, r *http.Request, sess auth.S
 
 func (s *Server) userTable(r *http.Request, flash *views.Flash) views.UserTable {
 	users, err, stale := s.fetchUsers(r)
+	siteNames, groupNames := s.lookupSiteGroupNames(r)
 	q := r.URL.Query().Get("q")
-	t := views.UserTable{Total: len(users), Query: q, Err: err, Stale: stale, Flash: flash}
+	t := views.UserTable{Total: len(users), Query: q, Err: err, Stale: stale, Flash: flash, SiteNames: siteNames, GroupNames: groupNames}
 	for _, u := range users {
-		fields := append([]string{u.Username, u.AdminLabel(), u.RuntimeLabel(), strconv.Itoa(u.ID)}, u.AllowedCIDRs...)
+		fields := append([]string{u.Username, u.AdminLabel(), u.RuntimeLabel(), strconv.Itoa(u.ID)}, u.DisplayCIDRs()...)
 		if model.Matches(q, append(fields, u.VirtualIPs...)...) {
 			t.Rows = append(t.Rows, u)
 		}
@@ -571,10 +608,11 @@ func (s *Server) policyTable(r *http.Request, flash *views.Flash) views.PolicyTa
 	defer cancel()
 	var ps []model.Policy
 	_, err := s.up.JSON(ctx, "GET", "policies", nil, &ps)
+	siteNames, userNames, groupNames := s.lookupAllEntityNames(r)
 	q := r.URL.Query().Get("q")
-	t := views.PolicyTable{Total: len(ps), Query: q, Err: errText(err), Flash: flash}
+	t := views.PolicyTable{Total: len(ps), Query: q, Err: errText(err), Flash: flash, SiteNames: siteNames, UserNames: userNames, GroupNames: groupNames}
 	for _, p := range ps {
-		if model.Matches(q, p.Name, p.SourceCIDR, p.DestinationCIDR, p.Protocol, p.AdminLabel()) {
+		if model.Matches(q, p.Name, p.SourceDisplay(siteNames, userNames, groupNames), p.DestDisplay(siteNames), p.Protocol, p.Ports, p.ActionLabel(), p.AdminLabel()) {
 			t.Rows = append(t.Rows, p)
 		}
 	}
@@ -701,13 +739,26 @@ func hubFormValues(id int, row map[string]any) views.Form {
 }
 
 func (s *Server) userForm(w http.ResponseWriter, r *http.Request, _ auth.Session) {
-	if f, ok := s.loadForm(w, r, "users", []string{"username", "allowed_cidrs", "traffic_mode", "max_sessions"}, map[string]string{"traffic_mode": "split", "max_sessions": strconv.Itoa(forms.DefaultMaxSessions)}); ok {
+	if f, ok := s.loadForm(w, r, "users", []string{"username", "allowed_cidrs", "traffic_mode", "max_sessions", "auth_method", "cert_id"}, map[string]string{"traffic_mode": "split", "max_sessions": strconv.Itoa(forms.DefaultMaxSessions), "auth_method": "eap-mschapv2"}); ok {
+		s.populateUserFormOptions(r, &f)
+		if f.ID == 0 {
+			f.Values["allow_vpc"] = "on"
+		} else {
+			vpc := f.VPCDisplay()
+			for _, c := range forms.SplitList(f.Values["allowed_cidrs"]) {
+				if c == vpc {
+					f.Values["allow_vpc"] = "on"
+					break
+				}
+			}
+		}
 		render(w, r, views.UserForm(f))
 	}
 }
 
 func (s *Server) policyForm(w http.ResponseWriter, r *http.Request, _ auth.Session) {
-	if f, ok := s.loadForm(w, r, "policies", []string{"name", "source_cidr", "destination_cidr", "protocol"}, map[string]string{"protocol": "all"}); ok {
+	if f, ok := s.loadForm(w, r, "policies", []string{"name", "source_cidr", "destination_cidr", "protocol", "action", "ports", "priority", "source_type", "source_ref", "destination_type", "destination_ref"}, map[string]string{"protocol": "all", "action": "allow", "priority": "100", "source_type": "cidr", "destination_type": "cidr"}); ok {
+		s.populatePolicyFormOptions(r, &f)
 		render(w, r, views.PolicyForm(f))
 	}
 }
@@ -779,7 +830,44 @@ func (s *Server) save(w http.ResponseWriter, r *http.Request, kind, label string
 }
 
 func (s *Server) saveUser(w http.ResponseWriter, r *http.Request, _ auth.Session) {
-	s.save(w, r, "users", "Akun", forms.User, views.UserForm)
+	id := 0
+	if r.PathValue("id") != "" {
+		var ok bool
+		if id, ok = pathID(r); !ok {
+			http.NotFound(w, r)
+			return
+		}
+	}
+	f := formFromRequest(r, id)
+	if vpc := strings.TrimSpace(r.PostForm.Get("vpc_cidr")); vpc != "" {
+		f.VPCCIDR = vpc
+	}
+	if _, hasVPC := r.PostForm["allow_vpc_present"]; hasVPC {
+		f.Values["allow_vpc"] = ternary(forms.Checkbox(r.PostForm, "allow_vpc", false), "on", "")
+	}
+	f.SelectedIDs = map[string]map[int]bool{
+		"allowed_sites": formIntSet(r.PostForm["allowed_sites"]),
+		"groups":        formIntSet(r.PostForm["groups"]),
+	}
+	body, errs := forms.User(r.PostForm, id == 0)
+	if len(errs) > 0 {
+		f.Errs = errs
+		render(w, r, views.UserForm(f))
+		return
+	}
+	ctx, cancel := s.ctx(r)
+	defer cancel()
+	method, path := "POST", "users"
+	if id > 0 {
+		method, path = "PUT", "users/"+strconv.Itoa(id)
+	}
+	if _, err := s.up.JSON(ctx, method, path, body, nil); err != nil {
+		f.Err = err.Error()
+		s.populateUserFormChoices(r, &f)
+		render(w, r, views.UserForm(f))
+		return
+	}
+	saved(w, "Akun berhasil disimpan")
 }
 
 func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request, _ auth.Session) {
@@ -792,7 +880,34 @@ func (s *Server) saveConnection(w http.ResponseWriter, r *http.Request, _ auth.S
 }
 
 func (s *Server) savePolicy(w http.ResponseWriter, r *http.Request, _ auth.Session) {
-	s.save(w, r, "policies", "Firewall rule", func(v url.Values, _ bool) (map[string]any, forms.Errors) { return forms.Policy(v) }, views.PolicyForm)
+	id := 0
+	if r.PathValue("id") != "" {
+		var ok bool
+		if id, ok = pathID(r); !ok {
+			http.NotFound(w, r)
+			return
+		}
+	}
+	f := formFromRequest(r, id)
+	body, errs := forms.Policy(r.PostForm)
+	if len(errs) > 0 {
+		f.Errs = errs
+		render(w, r, views.PolicyForm(f))
+		return
+	}
+	ctx, cancel := s.ctx(r)
+	defer cancel()
+	method, path := "POST", "policies"
+	if id > 0 {
+		method, path = "PUT", "policies/"+strconv.Itoa(id)
+	}
+	if _, err := s.up.JSON(ctx, method, path, body, nil); err != nil {
+		f.Err = err.Error()
+		s.populatePolicyFormOptions(r, &f)
+		render(w, r, views.PolicyForm(f))
+		return
+	}
+	saved(w, "Firewall rule berhasil disimpan")
 }
 
 func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request, _ auth.Session) {
@@ -821,6 +936,9 @@ var kindLabel = map[string]struct{ label, base, field string }{
 	"users":       {"akun", "/akun", "username"},
 	"connections": {"koneksi", "/koneksi", "name"},
 	"policies":    {"firewall rule", "/kebijakan", "name"},
+	"sites":       {"site S2S", "/sites", "name"},
+	"groups":      {"grup C2S", "/grup", "name"},
+	"routes":      {"static route", "/routing", "name"},
 }
 
 func (s *Server) confirm(kind string) handler {
@@ -996,8 +1114,11 @@ func (s *Server) siteAction(action string) handler {
 
 // hubFiles maps the UI download names to the backend config formats.
 var hubFiles = map[string]struct{ format, kind, ctype string }{
-	"setup.sh": {"script", "sh", "text/x-shellscript; charset=utf-8"},
-	"hub.conf": {"swanctl", "conf", "text/plain; charset=utf-8"},
+	"setup.sh":       {"script", "sh", "text/x-shellscript; charset=utf-8"},
+	"hub.conf":       {"swanctl", "conf", "text/plain; charset=utf-8"},
+	"mikrotik.rsc":   {"mikrotik", "rsc", "text/plain; charset=utf-8"},
+	"fortigate.conf": {"fortigate", "fg.conf", "text/plain; charset=utf-8"},
+	"cisco.cfg":      {"cisco", "cfg", "text/plain; charset=utf-8"},
 }
 
 // downloadHubSite proxies GET connections/{id}/sites/{a|b}/config as an

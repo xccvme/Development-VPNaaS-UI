@@ -78,6 +78,27 @@ templ OverviewPage(o Overview) {
 			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/koneksi" class="font-semibold text-[#1A73E8]">Kelola VPN Hub →</a></div>
 		</section>
 	</div>
+	if len(o.Sites) > 0 {
+		<section class="mt-6 flex flex-col rounded-xl border border-[#DEE2E6]">
+			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Multi-Site S2S (Hub & Spoke)</h2>
+			<ul class="divide-y divide-[#DEE2E6]">
+				for _, st := range o.Sites {
+					<li class="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
+						<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
+							@Dot(st.StatusLabel())
+							{ st.Name }
+						</span>
+						<span class="flex flex-wrap items-center gap-2">
+							@Badge(st.AdminLabel())
+							@Badge(st.StatusLabel())
+							<span class="font-mono text-xs text-[#6C757D]">{ string(st.Subnets) }</span>
+						</span>
+					</li>
+				}
+			</ul>
+			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/sites" class="font-semibold text-[#1A73E8]">Kelola Multi-Site S2S →</a></div>
+		</section>
+	}
 	<section class="mt-6 rounded-xl border border-[#DEE2E6]">
 		<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Info gateway</h2>
 		@KVList(o.Info)

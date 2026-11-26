@@ -125,9 +125,10 @@
 (function () {
   var re = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}\/(3[0-2]|[12]?\d)$/;
   function check(el) {
+    var max = parseInt(el.getAttribute("data-cidr-max") || "8", 10) || 8;
     var items = el.value.split(/[\s,]+/).filter(Boolean);
     var bad = items.filter(function (x) { return !re.test(x); });
-    var msg = bad.length ? "CIDR IPv4 tidak valid: " + bad[0] : items.length > 8 ? "Maksimal 8 subnet" : "";
+    var msg = bad.length ? "CIDR IPv4 tidak valid: " + bad[0] : items.length > max ? "Maksimal " + max + " subnet" : "";
     el.setCustomValidity(msg);
   }
   document.addEventListener("input", function (e) {

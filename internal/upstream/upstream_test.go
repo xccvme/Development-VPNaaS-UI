@@ -42,6 +42,38 @@ func TestAllowlistMatchesPythonProxy(t *testing.T) {
 	}
 }
 
+func TestAllowlistV2Routes(t *testing.T) {
+	allowed := [][2]string{
+		{"GET", "ready"}, {"GET", "gateway"}, {"GET", "sites"}, {"GET", "sites/1/config"},
+		{"GET", "groups"}, {"GET", "routes"}, {"GET", "routes/live"},
+		{"GET", "pki/ca"}, {"GET", "pki/ca/cert"}, {"GET", "pki/server"}, {"GET", "pki/crl"},
+		{"GET", "pki/certs"}, {"GET", "pki/certs/5/bundle"},
+		{"GET", "tokens"}, {"GET", "monitoring/tunnels"}, {"GET", "logs"},
+		{"POST", "sites"}, {"POST", "sites/2/connect"}, {"POST", "sites/2/disconnect"},
+		{"POST", "groups"}, {"POST", "routes"}, {"POST", "tokens"},
+		{"POST", "users/3/disconnect"}, {"POST", "users/3/sessions/13/disconnect"},
+		{"POST", "pki/certs"}, {"POST", "pki/certs/5/revoke"}, {"POST", "pki/server/rotate"},
+		{"POST", "diagnostics/check"},
+		{"PUT", "sites/2"}, {"DELETE", "sites/2"}, {"PUT", "groups/1"}, {"DELETE", "groups/1"},
+		{"PUT", "routes/1"}, {"DELETE", "routes/1"}, {"DELETE", "tokens/4"},
+	}
+	for _, a := range allowed {
+		if !Allowed(a[0], a[1]) {
+			t.Errorf("v2 route %v rejected", a)
+		}
+	}
+	denied := [][2]string{
+		{"GET", "sites/1"}, {"GET", "groups/1"}, {"GET", "routes/1"}, {"GET", "tokens/1"},
+		{"POST", "ready"}, {"DELETE", "pki/ca"}, {"POST", "logs"}, {"PUT", "tokens/1"},
+		{"GET", "sites/1/config/extra"}, {"POST", "users/3/sessions/../disconnect"},
+	}
+	for _, d := range denied {
+		if Allowed(d[0], d[1]) {
+			t.Errorf("v2 route %v should be denied", d)
+		}
+	}
+}
+
 func keyFile(t *testing.T, v string) string {
 	p := filepath.Join(t.TempDir(), "key")
 	os.WriteFile(p, []byte(v), 0o600)

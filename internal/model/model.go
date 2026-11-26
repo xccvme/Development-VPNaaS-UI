@@ -26,16 +26,39 @@ type Session struct {
 }
 
 type User struct {
-	ID            int       `json:"id"`
-	Username      string    `json:"username"`
-	Enabled       bool      `json:"enabled"`
-	AllowedCIDRs  []string  `json:"allowed_cidrs"`
-	TrafficMode   string    `json:"traffic_mode"`
-	RuntimeStatus string    `json:"runtime_status"`
-	SessionCount  *int      `json:"session_count"`
-	MaxSessions   *int      `json:"max_sessions"`
-	VirtualIPs    []string  `json:"virtual_ips"`
-	Sessions      []Session `json:"sessions"`
+	ID              int       `json:"id"`
+	Username        string    `json:"username"`
+	Enabled         bool      `json:"enabled"`
+	AuthMethod      string    `json:"auth_method"`
+	CertID          *int      `json:"cert_id"`
+	AllowedCIDRs    []string  `json:"allowed_cidrs"`
+	EffectiveCIDRs  []string  `json:"effective_cidrs"`
+	AllowedSites    []int     `json:"allowed_sites"`
+	Groups          []int     `json:"groups"`
+	TrafficMode     string    `json:"traffic_mode"`
+	RuntimeStatus   string    `json:"runtime_status"`
+	SessionCount    *int      `json:"session_count"`
+	MaxSessions     *int      `json:"max_sessions"`
+	VirtualIP       string    `json:"virtual_ip"`
+	VirtualIPs      []string  `json:"virtual_ips"`
+	Sessions        []Session `json:"sessions"`
+}
+
+func (u User) AuthLabel() string {
+	switch u.AuthMethod {
+	case "pubkey":
+		return "X.509"
+	case "eap-tls":
+		return "EAP-TLS"
+	}
+	return "EAP-MSCHAPv2"
+}
+
+func (u User) DisplayCIDRs() []string {
+	if len(u.EffectiveCIDRs) > 0 {
+		return u.EffectiveCIDRs
+	}
+	return u.AllowedCIDRs
 }
 
 func adminLabel(enabled bool) string {
@@ -201,10 +224,14 @@ func HubFile(name, site, kind string) string {
 		stem = "_"
 	}
 	base := "Hub-" + stem + "-Site-" + strings.ToUpper(site)
-	if kind == "sh" {
+	switch kind {
+	case "sh":
 		return "Setup-" + base + ".sh"
+	case "", "conf":
+		return base + ".conf"
+	default:
+		return base + "." + kind
 	}
-	return base + ".conf"
 }
 
 // SplitCSV splits a backend traffic-selector string ("a,b" or a legacy single
@@ -225,13 +252,195 @@ func (c Connection) RemoteList() []string { return SplitCSV(c.RemoteTS) }
 type Policy struct {
 	ID              int    `json:"id"`
 	Name            string `json:"name"`
+	Action          string `json:"action"`
+	Priority        int    `json:"priority"`
+	SourceType      string `json:"source_type"`
+	SourceRef       *int   `json:"source_ref"`
 	SourceCIDR      string `json:"source_cidr"`
+	DestinationType string `json:"destination_type"`
+	DestinationRef  *int   `json:"destination_ref"`
 	DestinationCIDR string `json:"destination_cidr"`
 	Protocol        string `json:"protocol"`
+	Ports           string `json:"ports"`
+	Description     string `json:"description"`
 	Enabled         bool   `json:"enabled"`
 }
 
 func (p Policy) AdminLabel() string { return adminLabel(p.Enabled) }
+
+func (p Policy) ActionLabel() string {
+	if strings.EqualFold(p.Action, "deny") {
+		return "DENY"
+	}
+	return "ALLOW"
+}
+
+func (p Policy) SourceDisplay(siteNames, userNames, groupNames map[int]string) string {
+	switch p.SourceType {
+	case "site":
+		if p.SourceRef != nil {
+			if n, ok := siteNames[*p.SourceRef]; ok {
+				return "Site: " + n
+			}
+			return "Site #" + strconv.Itoa(*p.SourceRef)
+		}
+	case "user":
+		if p.SourceRef != nil {
+			if n, ok := userNames[*p.SourceRef]; ok {
+				return "User: " + n
+			}
+			return "User #" + strconv.Itoa(*p.SourceRef)
+		}
+	case "group":
+		if p.SourceRef != nil {
+			if n, ok := groupNames[*p.SourceRef]; ok {
+				return "Grup: " + n
+			}
+			return "Grup #" + strconv.Itoa(*p.SourceRef)
+		}
+	}
+	return p.SourceCIDR
+}
+
+func (p Policy) DestDisplay(siteNames map[int]string) string {
+	switch p.DestinationType {
+	case "site":
+		if p.DestinationRef != nil {
+			if n, ok := siteNames[*p.DestinationRef]; ok {
+				return "Site: " + n
+			}
+			return "Site #" + strconv.Itoa(*p.DestinationRef)
+		}
+	case "vpc":
+		return "VPC / LAN Server"
+	}
+	return p.DestinationCIDR
+}
+
+// MultiSite represents a v2.0 independent Hub-and-Spoke S2S peer (/api/sites).
+type MultiSite struct {
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	Address       string `json:"address"`
+	IKEID         string `json:"ike_id"`
+	AuthMethod    string `json:"auth_method"`
+	PSKSet        bool   `json:"psk_set"`
+	CertID        *int   `json:"cert_id"`
+	Subnets       CSV    `json:"subnets"`
+	HubLocalTS    CSV    `json:"hub_local_ts"`
+	NAT           *bool  `json:"nat"`
+	Encap         *bool  `json:"encap"`
+	AllowVPC      *bool  `json:"allow_vpc"`
+	PeerSites     []int  `json:"peer_sites"`
+	DPDDelay      int    `json:"dpd_delay"`
+	IKEProposals  string `json:"ike_proposals"`
+	ESPProposals  string `json:"esp_proposals"`
+	Description   string `json:"description"`
+	Enabled       bool   `json:"enabled"`
+	Status        string `json:"status"`
+	RemoteHost    string `json:"remote_host"`
+	BytesIn       *int64 `json:"bytes_in"`
+	BytesOut      *int64 `json:"bytes_out"`
+	IKESAID       string `json:"ike_sa_id"`
+	Established   *int64 `json:"established_sec"`
+}
+
+func (s MultiSite) AdminLabel() string   { return adminLabel(s.Enabled) }
+func (s MultiSite) SubnetList() []string { return SplitCSV(string(s.Subnets)) }
+func (s MultiSite) HubTSList() []string  { return SplitCSV(string(s.HubLocalTS)) }
+func (s MultiSite) NATOn() bool          { return s.NAT == nil || *s.NAT }
+func (s MultiSite) AllowVPCOn() bool     { return s.AllowVPC == nil || *s.AllowVPC }
+func (s MultiSite) BehindNAT() bool      { return s.Address == "" || s.Address == "%any" }
+func (s MultiSite) StatusLabel() string {
+	switch strings.ToLower(s.Status) {
+	case "active":
+		return "Active"
+	case "down":
+		return "Down"
+	}
+	return "Unknown"
+}
+func (s MultiSite) AuthLabel() string {
+	if s.AuthMethod == "pubkey" {
+		return "X.509"
+	}
+	return "PSK"
+}
+
+// Group represents a v2.0 C2S user group (/api/groups).
+type Group struct {
+	ID           int      `json:"id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	AllowedCIDRs []string `json:"allowed_cidrs"`
+	AllowedSites []int    `json:"allowed_sites"`
+	TrafficMode  string   `json:"traffic_mode"`
+	MaxSessions  *int     `json:"max_sessions"`
+	Enabled      bool     `json:"enabled"`
+}
+
+func (g Group) AdminLabel() string { return adminLabel(g.Enabled) }
+
+// StaticRoute represents a v2.0 Linux static route (/api/routes).
+type StaticRoute struct {
+	ID              int    `json:"id"`
+	Name            string `json:"name"`
+	DestinationCIDR string `json:"destination_cidr"`
+	Gateway         string `json:"gateway"`
+	Interface       string `json:"interface"`
+	Metric          int    `json:"metric"`
+	SiteID          *int   `json:"site_id"`
+	Description     string `json:"description"`
+	Enabled         bool   `json:"enabled"`
+	SyncStatus      string `json:"sync_status"`
+}
+
+func (r StaticRoute) AdminLabel() string { return adminLabel(r.Enabled) }
+
+// CertRecord represents a v2.0 issued X.509 certificate (/api/pki/certs).
+type CertRecord struct {
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	SAN           string `json:"san"`
+	TargetType    string `json:"target_type"`
+	Serial        string `json:"serial"`
+	NotBefore     string `json:"not_before"`
+	NotAfter      string `json:"not_after"`
+	DaysRemaining int    `json:"days_remaining"`
+	Expired       bool   `json:"expired"`
+	Revoked       bool   `json:"revoked"`
+	RevokedAt     string `json:"revoked_at"`
+	Fingerprint   string `json:"sha256_fingerprint"`
+}
+
+func (c CertRecord) StatusLabel() string {
+	if c.Revoked {
+		return "Revoked"
+	}
+	if c.Expired {
+		return "Expired"
+	}
+	return "Active"
+}
+
+// APIToken represents a v2.0 scoped bearer token (/api/tokens).
+type APIToken struct {
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	Prefix     string `json:"prefix"`
+	Role       string `json:"role"`
+	CreatedAt  string `json:"created_at"`
+	ExpiresAt  string `json:"expires_at"`
+	Revoked    bool   `json:"revoked"`
+	LastUsedAt string `json:"last_used_at"`
+}
+
+func (t APIToken) StatusLabel() string {
+	if t.Revoked {
+		return "Revoked"
+	}
+	return "Active"
+}
 
 var saLine = regexp.MustCompile(`^\s*(site|net)-(\d+):\s*#\d+,\s*(?:reqid \d+,\s*)?([A-Z_]+)`)
 

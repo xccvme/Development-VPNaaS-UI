@@ -21,9 +21,10 @@ var (
 	ErrUnavailable = errors.New("VPN API tidak dapat dihubungi. Periksa SSH tunnel dan layanan backend.")
 	ErrNotAllowed  = errors.New("rute API tidak dikenal")
 
-	getRe    = regexp.MustCompile(`^(health|overview|connections|users|policies|status|audit|users/[^/]+/profile|connections/[^/]+/sites/[ab]/config)$`)
-	postRe   = regexp.MustCompile(`^(connections|users|policies|connections/[^/]+/(initiate|terminate)|connections/[^/]+/sites/[ab]/(connect|disconnect))$`)
-	itemRe   = regexp.MustCompile(`^(connections|users|policies)/[^/]+$`)
+	getRe    = regexp.MustCompile(`^(health|ready|gateway|overview|connections|users|policies|sites|groups|routes|routes/live|status|audit|tokens|monitoring/tunnels|logs|pki/ca|pki/ca/cert|pki/server|pki/certs|pki/crl|users/[^/]+/profile|connections/[^/]+/sites/[ab]/config|sites/[^/]+/config|pki/certs/[^/]+/bundle)$`)
+	postRe   = regexp.MustCompile(`^(connections|users|policies|sites|groups|routes|tokens|pki/certs|pki/server/rotate|diagnostics/check|connections/[^/]+/(initiate|terminate)|connections/[^/]+/sites/[ab]/(connect|disconnect)|sites/[^/]+/(connect|disconnect)|users/[^/]+/disconnect|users/[^/]+/sessions/[^/]+/disconnect|pki/certs/[^/]+/revoke)$`)
+	putRe    = regexp.MustCompile(`^(connections|users|policies|sites|groups|routes)/[^/]+$`)
+	deleteRe = regexp.MustCompile(`^(connections|users|policies|sites|groups|routes|tokens)/[^/]+$`)
 	maxReply = int64(8 << 20)
 )
 
@@ -37,8 +38,10 @@ func Allowed(method, path string) bool {
 		return getRe.MatchString(path)
 	case http.MethodPost:
 		return postRe.MatchString(path)
-	case http.MethodPut, http.MethodDelete:
-		return itemRe.MatchString(path)
+	case http.MethodPut:
+		return putRe.MatchString(path)
+	case http.MethodDelete:
+		return deleteRe.MatchString(path)
 	}
 	return false
 }

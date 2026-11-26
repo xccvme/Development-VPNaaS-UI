@@ -160,12 +160,23 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		out(200, map[string]any{"revoked": true})
 	case len(parts) == 4 && parts[0] == "pki" && parts[1] == "certs" && parts[3] == "bundle" && r.Method == "GET":
 		f.queries = append(f.queries, r.URL.RawQuery)
-		if r.URL.Query().Get("format") == "p12" {
+		switch r.URL.Query().Get("format") {
+		case "p12":
 			w.Header().Set("Content-Type", "application/x-pkcs12")
 			w.Header().Set("Content-Disposition", `attachment; filename="cert-`+parts[2]+`.p12"`)
 			w.WriteHeader(200)
 			w.Write([]byte("PK12DATA"))
-		} else {
+		case "crt":
+			w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+			w.Header().Set("Content-Disposition", `attachment; filename="cert-`+parts[2]+`.crt"`)
+			w.WriteHeader(200)
+			w.Write([]byte("-----BEGIN CERTIFICATE-----\nTEVBRg==\n-----END CERTIFICATE-----\n"))
+		case "key":
+			w.Header().Set("Content-Type", "application/x-pem-file")
+			w.Header().Set("Content-Disposition", `attachment; filename="cert-`+parts[2]+`.key"`)
+			w.WriteHeader(200)
+			w.Write([]byte("-----BEGIN PRIVATE KEY-----\nS0VZ\n-----END PRIVATE KEY-----\n"))
+		default:
 			out(200, map[string]any{"certificate": "PEM-CERT", "private_key": "PEM-KEY", "ca_certificate": "PEM-CA"})
 		}
 	case len(parts) == 3 && parts[0] == "sites" && parts[2] == "config":
@@ -199,6 +210,12 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Disposition", `attachment; filename="VPNaaS-poc-client.sswan"`)
 			w.WriteHeader(200)
 			w.Write([]byte(`{"uuid":"1234","name":"VPNaaS-poc-client"}`))
+			return
+		case "manual":
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("Content-Disposition", `attachment; filename="VPNaaS-Client-poc-client.conf"`)
+			w.WriteHeader(200)
+			w.Write([]byte("[GATEWAY_SERVER]\nserver_address = 192.0.2.10\n"))
 			return
 		}
 		w.Header().Set("Content-Disposition", `attachment; filename="user-`+parts[1]+`.json"`)
@@ -403,10 +420,13 @@ func TestJSONLoginCompat(t *testing.T) {
 func TestPagesRenderAndEscape(t *testing.T) {
 	e := setup(t)
 	e.login()
+	e.api.sites = []map[string]any{
+		{"id": 10.0, "name": "site-jkt", "address": "203.0.113.5", "ike_id": "site-jkt@vpnaas", "subnets": "192.168.50.0/24", "enabled": true, "status": "active", "online": true, "last_connected_at": "2026-11-26T10:00:00Z"},
+	}
 	checks := map[string][]string{
-		"/ringkasan": {"Ringkasan", "VPN Hub", "Akun C2S", "Firewall Rules", "strongSwan swanctl"},
-		"/koneksi":   {"branch", "203.0.113.5", "192.168.50.0/24", "Active", "Connect", "Disconnect"},
-		"/akun":      {"poc-client", "Enabled", "Disabled", "Active", "Down", "10.250.0.4", "Split", "/unduh/akun/3/profil.json", "/unduh/akun/3/windows.ps1", "Setup-Client(windows).ps1"},
+		"/ringkasan": {"Ringkasan", "Site-to-Site (S2S)", "Client-to-Site (C2S)", "Static Routing", "strongSwan swanctl"},
+		"/sites":     {"site-jkt", "203.0.113.5", "192.168.50.0/24", "Online", "2026-11-26T10:00:00Z", "Connect", "Disconnect"},
+		"/akun":      {"poc-client", "Enabled", "Disabled", "Online", "Offline", "10.250.0.4", "Split", "/unduh/akun/3/profil.json", "/unduh/akun/3/windows.ps1", "Setup-Client(windows).ps1"},
 		"/kebijakan": {"lan", "10.250.0.0/24", "TCP"},
 		"/status":    {"ESTABLISHED", "strongSwan swanctl", "pool-3"},
 		"/audit":     {"2026-11-13 20:15:11", "delete", "resource_id"},
@@ -481,15 +501,15 @@ func TestCSRFAndOriginRequiredForMutations(t *testing.T) {
 			t.Errorf("%v: %d", h, res.StatusCode)
 		}
 	}
-	for _, p := range []string{"/akun/3", "/koneksi/4", "/kebijakan/5"} {
+	for _, p := range []string{"/akun/3", "/sites/10", "/kebijakan/5"} {
 		res, _ := e.do("DELETE", p, nil, map[string]string{"Origin": e.srv.URL})
 		if res.StatusCode != 403 {
 			t.Errorf("delete %s without csrf: %d", p, res.StatusCode)
 		}
 	}
-	res, _ := e.do("POST", "/koneksi/4/initiate", nil, map[string]string{"Origin": e.srv.URL})
+	res, _ := e.do("POST", "/sites/10/connect", nil, map[string]string{"Origin": e.srv.URL})
 	if res.StatusCode != 403 {
-		t.Error("initiate without csrf")
+		t.Error("connect without csrf")
 	}
 	for _, c := range e.api.calls {
 		if !strings.HasPrefix(c, "GET") {
@@ -555,20 +575,21 @@ func TestUserCRUD(t *testing.T) {
 	}
 }
 
-func TestConnectionAndPolicyCRUD(t *testing.T) {
+func TestSiteAndPolicyCRUD(t *testing.T) {
 	e := setup(t)
 	e.login()
-	res, _ := e.do("POST", "/koneksi", url.Values{"name": {"tmp"}, "remote_address": {"198.51.100.7"}, "remote_ts": {"192.168.77.0/24"}, "psk": {"pre-shared-key"}, "enabled": {"on"}}, e.safe())
-	if _, sent := e.api.bodies[len(e.api.bodies)-1]["local_ts"]; res.StatusCode != 200 || sent {
-		t.Fatal("create connection")
+	res, _ := e.do("POST", "/sites", url.Values{"name": {"tmp-site"}, "address": {"198.51.100.7"}, "subnets": {"192.168.77.0/24"}, "allow_vpc": {"0", "on"}, "nat": {"0", "on"}, "encap": {"0", "on"}, "enabled": {"on"}}, e.safe())
+	if res.StatusCode != 200 || e.api.bodies[len(e.api.bodies)-1]["subnets"] != "192.168.77.0/24" {
+		t.Fatal("create site")
 	}
-	res, body := e.do("POST", "/koneksi/4/initiate", nil, e.safe())
-	if res.StatusCode != 200 || !strings.Contains(body, "swanctl initiate &lt;done&gt;") {
-		t.Fatalf("initiate: %s", body)
+	siteID := strconv.Itoa(e.api.nextID)
+	res, body := e.do("POST", "/sites/"+siteID+"/connect", nil, e.safe())
+	if res.StatusCode != 200 || !strings.Contains(body, "Connect site #"+siteID+" berhasil") {
+		t.Fatalf("site connect: %s", body)
 	}
-	e.do("POST", "/koneksi/4/terminate", nil, e.safe())
-	if !strings.Contains(strings.Join(e.api.calls, ","), "POST connections/4/terminate") {
-		t.Fatal("terminate")
+	e.do("POST", "/sites/"+siteID+"/disconnect", nil, e.safe())
+	if !strings.Contains(strings.Join(e.api.calls, ","), "POST sites/"+siteID+"/disconnect") {
+		t.Fatal("site disconnect")
 	}
 	res, _ = e.do("POST", "/kebijakan", url.Values{"name": {"tmp-pol"}, "source_cidr": {"10.250.0.0/24"}, "destination_cidr": {"10.10.7.1/32"}, "protocol": {"icmp"}, "enabled": {"on"}}, e.safe())
 	if res.StatusCode != 200 || e.api.bodies[len(e.api.bodies)-1]["protocol"] != "icmp" {
@@ -583,7 +604,7 @@ func TestConnectionAndPolicyCRUD(t *testing.T) {
 	if res.StatusCode != 200 || len(e.api.policies) != 1 {
 		t.Fatal("delete policy")
 	}
-	for _, p := range []string{"/akun/abc", "/akun/0", "/akun/-1", "/koneksi/1x/initiate"} {
+	for _, p := range []string{"/akun/abc", "/akun/0", "/akun/-1", "/sites/1x/connect"} {
 		res, _ := e.do("DELETE", p, nil, e.safe())
 		if res.StatusCode != 404 && res.StatusCode != 405 {
 			t.Errorf("%s: %d", p, res.StatusCode)
@@ -629,11 +650,7 @@ func TestUnknownWhenStatusUnavailable(t *testing.T) {
 	e := setup(t)
 	e.login()
 	e.api.failPaths["status"] = 502
-	_, body := e.do("GET", "/koneksi", nil, nil)
-	if !strings.Contains(body, "Unknown") || !strings.Contains(body, "branch") {
-		t.Fatal("connection runtime should be Unknown")
-	}
-	_, body = e.do("GET", "/status", nil, nil)
+	_, body := e.do("GET", "/status", nil, nil)
 	if !strings.Contains(body, "Gagal &lt;b&gt;upstream&lt;/b&gt;") {
 		t.Fatal("status error not shown")
 	}
@@ -641,7 +658,7 @@ func TestUnknownWhenStatusUnavailable(t *testing.T) {
 	e.do("GET", "/akun", nil, nil)
 	e.api.failPaths["users"] = 503
 	_, body = e.do("GET", "/akun/tabel", nil, map[string]string{"HX-Request": "true"})
-	if !strings.Contains(body, "poc-client") || strings.Contains(body, ">Active<") || !strings.Contains(body, "Unknown") || !strings.Contains(body, "Gagal") {
+	if !strings.Contains(body, "poc-client") || strings.Contains(body, ">Online<") || !strings.Contains(body, "Unknown") || !strings.Contains(body, "Gagal") {
 		t.Fatalf("cached unknown: %s", body)
 	}
 }
@@ -649,11 +666,11 @@ func TestUnknownWhenStatusUnavailable(t *testing.T) {
 func TestEmptyStates(t *testing.T) {
 	e := setup(t)
 	e.login()
-	e.api.conns = nil
+	e.api.sites = nil
 	e.api.policies = []map[string]any{}
-	_, body := e.do("GET", "/koneksi", nil, nil)
-	if !strings.Contains(body, "Belum ada VPN Hub") {
-		t.Fatal("empty connections")
+	_, body := e.do("GET", "/sites", nil, nil)
+	if !strings.Contains(body, "Belum ada Site S2S") {
+		t.Fatal("empty sites")
 	}
 	_, body = e.do("GET", "/kebijakan", nil, nil)
 	if !strings.Contains(body, "Belum ada firewall rule") {

@@ -31,12 +31,19 @@ type User struct {
 	Enabled         bool      `json:"enabled"`
 	AuthMethod      string    `json:"auth_method"`
 	CertID          *int      `json:"cert_id"`
+	AllowVPC        bool      `json:"allow_vpc"`
+	AllowAllSites   bool      `json:"allow_all_sites"`
 	AllowedCIDRs    []string  `json:"allowed_cidrs"`
 	EffectiveCIDRs  []string  `json:"effective_cidrs"`
+	EffectiveSites  []int     `json:"effective_site_ids"`
+	AccessSummary   string    `json:"access_summary"`
 	AllowedSites    []int     `json:"allowed_sites"`
 	Groups          []int     `json:"groups"`
 	TrafficMode     string    `json:"traffic_mode"`
 	RuntimeStatus   string    `json:"runtime_status"`
+	Online          *bool     `json:"online"`
+	LastConnectedAt string    `json:"last_connected_at"`
+	LastRemoteHost  string    `json:"last_remote_host"`
 	SessionCount    *int      `json:"session_count"`
 	MaxSessions     *int      `json:"max_sessions"`
 	VirtualIP       string    `json:"virtual_ip"`
@@ -59,6 +66,29 @@ func (u User) DisplayCIDRs() []string {
 		return u.EffectiveCIDRs
 	}
 	return u.AllowedCIDRs
+}
+
+func (u User) OnlineLabel() string {
+	if u.Online != nil {
+		if *u.Online {
+			return "Online"
+		}
+		return "Offline"
+	}
+	switch u.RuntimeLabel() {
+	case "Active":
+		return "Online"
+	case "Down":
+		return "Offline"
+	}
+	return "Unknown"
+}
+
+func (u User) LastConnectDisplay() string {
+	if u.LastConnectedAt != "" {
+		return u.LastConnectedAt
+	}
+	return "Belum pernah terkoneksi"
 }
 
 func adminLabel(enabled bool) string {
@@ -317,40 +347,52 @@ func (p Policy) DestDisplay(siteNames map[int]string) string {
 	return p.DestinationCIDR
 }
 
-// MultiSite represents a v2.0 independent Hub-and-Spoke S2S peer (/api/sites).
+// MultiSite represents an Enterprise Hub-and-Spoke S2S peer (/api/sites).
 type MultiSite struct {
-	ID            int    `json:"id"`
-	Name          string `json:"name"`
-	Address       string `json:"address"`
-	IKEID         string `json:"ike_id"`
-	AuthMethod    string `json:"auth_method"`
-	PSKSet        bool   `json:"psk_set"`
-	CertID        *int   `json:"cert_id"`
-	Subnets       CSV    `json:"subnets"`
-	HubLocalTS    CSV    `json:"hub_local_ts"`
-	NAT           *bool  `json:"nat"`
-	Encap         *bool  `json:"encap"`
-	AllowVPC      *bool  `json:"allow_vpc"`
-	PeerSites     []int  `json:"peer_sites"`
-	DPDDelay      int    `json:"dpd_delay"`
-	IKEProposals  string `json:"ike_proposals"`
-	ESPProposals  string `json:"esp_proposals"`
-	Description   string `json:"description"`
-	Enabled       bool   `json:"enabled"`
-	Status        string `json:"status"`
-	RemoteHost    string `json:"remote_host"`
-	BytesIn       *int64 `json:"bytes_in"`
-	BytesOut      *int64 `json:"bytes_out"`
-	IKESAID       string `json:"ike_sa_id"`
-	Established   *int64 `json:"established_sec"`
+	ID               int      `json:"id"`
+	Name             string   `json:"name"`
+	Address          string   `json:"address"`
+	IKEID            string   `json:"ike_id"`
+	AuthMethod       string   `json:"auth_method"`
+	PSKSet           bool     `json:"psk_set"`
+	CertID           *int     `json:"cert_id"`
+	Subnets          CSV      `json:"subnets"`
+	SubnetsList      []string `json:"subnets_list"`
+	EffectiveSubnets []string `json:"effective_subnets"`
+	HubLocalTS       CSV      `json:"hub_local_ts"`
+	NAT              *bool    `json:"nat"`
+	Encap            *bool    `json:"encap"`
+	AllowVPC         *bool    `json:"allow_vpc"`
+	PeerSites        []int    `json:"peer_sites"`
+	DPDDelay         int      `json:"dpd_delay"`
+	IKEProposals     string   `json:"ike_proposals"`
+	ESPProposals     string   `json:"esp_proposals"`
+	Description      string   `json:"description"`
+	Enabled          bool     `json:"enabled"`
+	Status           string   `json:"status"`
+	Online           *bool    `json:"online"`
+	ConnectionState  string   `json:"connection_state"`
+	LastConnectedAt  string   `json:"last_connected_at"`
+	LastRemoteHost   string   `json:"last_remote_host"`
+	RemoteHost       string   `json:"remote_host"`
+	BytesIn          *int64   `json:"bytes_in"`
+	BytesOut         *int64   `json:"bytes_out"`
+	IKESAID          string   `json:"ike_sa_id"`
+	Established      *int64   `json:"established_sec"`
 }
 
 func (s MultiSite) AdminLabel() string   { return adminLabel(s.Enabled) }
 func (s MultiSite) SubnetList() []string { return SplitCSV(string(s.Subnets)) }
-func (s MultiSite) HubTSList() []string  { return SplitCSV(string(s.HubLocalTS)) }
-func (s MultiSite) NATOn() bool          { return s.NAT == nil || *s.NAT }
-func (s MultiSite) AllowVPCOn() bool     { return s.AllowVPC == nil || *s.AllowVPC }
-func (s MultiSite) BehindNAT() bool      { return s.Address == "" || s.Address == "%any" }
+func (s MultiSite) EffectiveSubnetList() []string {
+	if len(s.EffectiveSubnets) > 0 {
+		return s.EffectiveSubnets
+	}
+	return s.SubnetList()
+}
+func (s MultiSite) HubTSList() []string { return SplitCSV(string(s.HubLocalTS)) }
+func (s MultiSite) NATOn() bool         { return s.NAT == nil || *s.NAT }
+func (s MultiSite) AllowVPCOn() bool    { return s.AllowVPC == nil || *s.AllowVPC }
+func (s MultiSite) BehindNAT() bool     { return s.Address == "" || s.Address == "%any" }
 func (s MultiSite) StatusLabel() string {
 	switch strings.ToLower(s.Status) {
 	case "active":
@@ -359,6 +401,39 @@ func (s MultiSite) StatusLabel() string {
 		return "Down"
 	}
 	return "Unknown"
+}
+func (s MultiSite) OnlineLabel() string {
+	if s.Online != nil {
+		if *s.Online {
+			return "Online"
+		}
+		return "Offline"
+	}
+	switch strings.ToLower(s.ConnectionState) {
+	case "online":
+		return "Online"
+	case "offline":
+		return "Offline"
+	}
+	switch strings.ToLower(s.Status) {
+	case "active":
+		return "Online"
+	case "down":
+		return "Offline"
+	}
+	return "Unknown"
+}
+func (s MultiSite) LastConnectDisplay() string {
+	if s.LastConnectedAt != "" {
+		return s.LastConnectedAt
+	}
+	return "Belum pernah terkoneksi"
+}
+func (s MultiSite) DisplayRemoteHost() string {
+	if s.RemoteHost != "" {
+		return s.RemoteHost
+	}
+	return s.LastRemoteHost
 }
 func (s MultiSite) AuthLabel() string {
 	if s.AuthMethod == "pubkey" {

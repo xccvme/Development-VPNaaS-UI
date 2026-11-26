@@ -298,21 +298,27 @@ func TestUserV2SiteOnlyAndCombo(t *testing.T) {
 	if len(errs) != 0 || body["auth_method"] != "pubkey" || body["cert_id"] != 7 {
 		t.Fatalf("cert user failed: %v %#v", errs, body)
 	}
-	// UI allow_vpc checkbox toggling:
-	// 1. Edit VPC+Site -> Site-only by unchecking allow_vpc strips vpc_cidr even if present in allowed_cidrs textarea
-	vStrip := vals("username", "u1", "allow_vpc_present", "1", "vpc_cidr", "10.10.7.0/24", "allow_vpc", "0", "allowed_cidrs", "10.10.7.0/24", "allowed_sites_present", "1", "allowed_sites", "2", "enabled", "on")
+	// UI allow_vpc & allow_all_sites checkboxes:
+	// 1. Edit VPC+Site -> Site-only by unchecking allow_vpc sends allow_vpc=false and strips vpc_cidr from allowed_cidrs
+	vStrip := vals("username", "u1", "allow_vpc_present", "1", "vpc_cidr", "10.10.7.0/24", "allow_vpc", "0", "allow_all_sites_present", "1", "allow_all_sites", "0", "allowed_cidrs", "10.10.7.0/24", "allowed_sites_present", "1", "allowed_sites", "2", "enabled", "on")
 	body, errs = User(vStrip, false)
-	if len(errs) != 0 || !reflect.DeepEqual(body["allowed_cidrs"], []string{}) || !reflect.DeepEqual(body["allowed_sites"], []int{2}) {
+	if len(errs) != 0 || body["allow_vpc"] != false || body["allow_all_sites"] != false || !reflect.DeepEqual(body["allowed_cidrs"], []string{}) || !reflect.DeepEqual(body["allowed_sites"], []int{2}) {
 		t.Fatalf("uncheck allow_vpc failed: %v %#v", errs, body)
 	}
-	// 2. Edit Site-only -> VPC-only by checking allow_vpc adds vpc_cidr cleanly
-	vAddVPC := vals("username", "u1", "allow_vpc_present", "1", "vpc_cidr", "10.10.7.0/24", "allow_vpc", "0", "allow_vpc", "on", "allowed_cidrs", "", "allowed_sites_present", "1", "enabled", "on")
+	// 2. Edit Site-only -> VPC-only by checking allow_vpc sends allow_vpc=true cleanly (works with 0 sites!)
+	vAddVPC := vals("username", "u1", "allow_vpc_present", "1", "vpc_cidr", "10.10.7.0/24", "allow_vpc", "0", "allow_vpc", "on", "allow_all_sites_present", "1", "allow_all_sites", "0", "allowed_cidrs", "", "allowed_sites_present", "1", "enabled", "on")
 	body, errs = User(vAddVPC, false)
-	if len(errs) != 0 || !reflect.DeepEqual(body["allowed_cidrs"], []string{"10.10.7.0/24"}) || !reflect.DeepEqual(body["allowed_sites"], []int{}) {
+	if len(errs) != 0 || body["allow_vpc"] != true || body["allow_all_sites"] != false || !reflect.DeepEqual(body["allowed_cidrs"], []string{}) || !reflect.DeepEqual(body["allowed_sites"], []int{}) {
 		t.Fatalf("check allow_vpc failed: %v %#v", errs, body)
 	}
-	// 3. Unchecking everything returns validation error
-	vNone := vals("username", "u1", "allow_vpc_present", "1", "vpc_cidr", "10.10.7.0/24", "allow_vpc", "0", "allowed_cidrs", "", "allowed_sites_present", "1")
+	// 3. All sites + VPC mode sends both allow_vpc=true and allow_all_sites=true
+	vAll := vals("username", "u1", "allow_vpc_present", "1", "allow_vpc", "0", "allow_vpc", "on", "allow_all_sites_present", "1", "allow_all_sites", "0", "allow_all_sites", "on", "allowed_cidrs", "", "allowed_sites_present", "1", "enabled", "on")
+	body, errs = User(vAll, false)
+	if len(errs) != 0 || body["allow_vpc"] != true || body["allow_all_sites"] != true {
+		t.Fatalf("all sites + vpc failed: %v %#v", errs, body)
+	}
+	// 4. Unchecking everything returns validation error
+	vNone := vals("username", "u1", "allow_vpc_present", "1", "vpc_cidr", "10.10.7.0/24", "allow_vpc", "0", "allow_all_sites_present", "1", "allow_all_sites", "0", "allowed_cidrs", "", "allowed_sites_present", "1")
 	if _, errs := User(vNone, false); errs["allowed_cidrs"] == "" {
 		t.Fatalf("expected error when no destination selected")
 	}

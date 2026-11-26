@@ -2,19 +2,20 @@ package views
 
 import "vpnaas/ui-goth/internal/model"
 
-// ---------- Multi-Site S2S (/sites) ----------
+// ---------- Site-to-Site S2S (/sites) ----------
 
 templ SitesPage(t SiteTable) {
-	@PageHeader("Multi-Site S2S (Hub & Spoke)", "Tambahkan Site-A, Site-B, hingga Site-N secara mandiri. Default: antar-site terisolasi (default-deny) sampai Anda memilih site tujuan pada Peer Sites atau Firewall Rules.", PrimaryButton("Tambah Site", "/sites/baru"))
+	@PageHeader("Site-to-Site (S2S)", "Tambahkan Site-A satu per satu hingga Site-N via IPsec/IKEv2 (FIPS). Saat menambah site baru, pilih site yang sudah ada beserta subnet di belakangnya yang ingin dihubungkan.", PrimaryButton("Tambah Site", "/sites/baru"))
 	@VPNTabs("sites")
-	<div class="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-[#DEE2E6] bg-[#F8F9FA] px-4 py-3 text-xs text-[#495057]">
-		<span class="font-semibold text-[#2F6BC4]">Alur Bertahap:</span>
-		<span>1) Buat & konek Site-A duluan</span>
-		<span>→</span>
-		<span>2) Tambah Site-B/N lalu centang site mana saja yang boleh saling konek (Peer Sites)</span>
-		<span>→</span>
-		<span>3) Jika remote subnet Site-A bertambah, unduh & jalankan ulang Configure idempoten di Site-A.</span>
-	</div>
+	<details class="mb-4 rounded-lg border border-[#DEE2E6] bg-[#F8F9FA] px-4 py-2 text-sm text-[#495057]" data-s2s-info>
+		<summary class="cursor-pointer select-none font-semibold text-[#2F6BC4]">Panduan koneksi bertahap Site-A → Site-N &amp; NAT di belakang site</summary>
+		<ul class="mt-2 list-disc space-y-1 pl-5 text-xs">
+			<li><strong>Mulai dari 1 site (Site-A):</strong> Buat Site-A terlebih dahulu lalu unduh konfigurasi dari menu Configure (Linux, MikroTik, FortiGate, Cisco).</li>
+			<li><strong>Tambah Site-B..N:</strong> Saat menambah site berikutnya, centang site lama yang boleh saling terhubung (Peer Sites). Antar-site yang tidak dicentang tetap terisolasi (default-deny).</li>
+			<li><strong>NAT / masquerade di sisi site:</strong> Aktifkan agar host LAN di belakang site dapat diakses oleh C2S maupun peer site tanpa perlu route balik manual.</li>
+			<li><strong>OpenStack:</strong> Pastikan port LAN gateway memiliki allowed-address-pairs atau port security sesuai agar paket tidak di-drop anti-spoofing.</li>
+		</ul>
+	</details>
 	@SitesTable(t)
 }
 
@@ -26,16 +27,16 @@ templ SitesTable(t SiteTable) {
 			@ErrorBox(t.Err)
 		</div>
 		if len(t.Rows) == 0 {
-			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada Multi-Site S2S", "Klik Tambah Site untuk mendaftarkan kantor cabang, data center, atau on-premises.")
+			@emptyOrNoMatch(t.Total, t.Err != "", "Belum ada Site S2S", "Klik Tambah Site untuk membuat endpoint Site-A pertama Anda.")
 		} else {
 			<div class="overflow-x-auto pb-1" tabindex="0">
 				<table class="min-w-full text-sm">
 					<thead class="bg-[#E9ECEF]">
 						<tr>
 							@th("Site & Auth")
-							@th("Subnet LAN")
-							@th("Akses & Peering (Hub TS)")
-							@th("Runtime")
+							@th("Jaringan di Belakang Site")
+							@th("Peering & Akses (Remote TS)")
+							@th("Status & Last Connect")
 							@th("Aksi")
 						</tr>
 					</thead>
@@ -44,7 +45,7 @@ templ SitesTable(t SiteTable) {
 							<tr class="border-t border-[#DEE2E6] align-top hover:bg-[#F8F9FA]">
 								<td class="whitespace-nowrap px-3 py-3">
 									<div class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
-										@Dot(s.StatusLabel())
+										@Dot(s.OnlineLabel())
 										{ s.Name }
 									</div>
 									<div class="mt-1 flex flex-wrap items-center gap-1 text-xs text-[#6C757D]">
@@ -55,7 +56,7 @@ templ SitesTable(t SiteTable) {
 									<div class="mt-1 font-mono text-xs text-[#6C757D]">{ s.IKEID }</div>
 								</td>
 								<td class="px-3 py-3 font-mono text-xs">
-									for _, n := range s.SubnetList() {
+									for _, n := range s.EffectiveSubnetList() {
 										<div>{ n }</div>
 									}
 									<div class="mt-1 font-sans text-[#6C757D]">
@@ -84,9 +85,10 @@ templ SitesTable(t SiteTable) {
 									}
 								</td>
 								<td class="px-3 py-3 text-xs">
-									@Badge(s.StatusLabel())
-									if s.RemoteHost != "" {
-										<div class="mt-1 font-mono text-[#6C757D]">{ s.RemoteHost }</div>
+									@Badge(s.OnlineLabel())
+									<div class="mt-1 text-[#495057]">Last connect: { s.LastConnectDisplay() }</div>
+									if s.DisplayRemoteHost() != "" {
+										<div class="mt-1 font-mono text-[#6C757D]">{ s.DisplayRemoteHost() }</div>
 									}
 									if s.BytesIn != nil || s.BytesOut != nil {
 										<div class="mt-1 font-mono text-[#6C757D]">in { model.Bytes(s.BytesIn) } · out { model.Bytes(s.BytesOut) }</div>
@@ -94,13 +96,15 @@ templ SitesTable(t SiteTable) {
 								</td>
 								<td class="px-3 py-3">
 									@rowActions("site-menu-"+itoa(s.ID), s.Name) {
-										<button type="button" role="menuitem" hx-get={ idURL("/sites", s.ID, "/ubah") } hx-target="#modal">Ubah & Atur Peering</button>
-										<button type="button" role="menuitem" hx-get={ idURL("/sites", s.ID, "/configure") } hx-target="#modal">Configure (Multi-Vendor)</button>
-										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "script")) } download>Script Linux (.sh)</a>
-										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "swanctl")) } download>strongSwan (.conf)</a>
+										<button type="button" role="menuitem" hx-get={ idURL("/sites", s.ID, "/configure") } hx-target="#modal">Configure &amp; Unduh Config</button>
+										<button type="button" role="menuitem" hx-get={ idURL("/sites", s.ID, "/ubah") } hx-target="#modal">Ubah &amp; Atur Peering</button>
+										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "generic")) } download>Enterprise Manual (.conf)</a>
 										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "mikrotik")) } download>MikroTik v7 (.rsc)</a>
 										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "fortigate")) } download>FortiGate (.conf)</a>
 										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "cisco")) } download>Cisco IOS-XE (.cfg)</a>
+										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "script")) } download>Script Linux (.sh)</a>
+										<a role="menuitem" href={ templ.URL(siteDownloadURL(s.ID, "swanctl")) } download>strongSwan (.conf)</a>
+										<a role="menuitem" href="/unduh/pki/ca.crt" download>Root CA (.crt)</a>
 										<button type="button" role="menuitem" hx-post={ idURL("/sites", s.ID, "/connect") } hx-target="#sites-table" hx-swap="outerHTML">Connect</button>
 										<button type="button" role="menuitem" hx-get={ idURL("/sites", s.ID, "/disconnect") } hx-target="#modal">Disconnect</button>
 										<button type="button" role="menuitem" class="menu-danger" hx-get={ idURL("/sites", s.ID, "/hapus") } hx-target="#modal">Hapus</button>
@@ -127,6 +131,9 @@ templ SiteForm(f Form) {
 			class="space-y-4"
 		>
 			@ErrorBox(f.Err)
+			if !f.Edit() && len(f.OtherSites()) == 0 {
+				<p class="rounded-md bg-[#E8EEF9] px-3 py-2 text-xs text-[#2C3E87]">Site pertama (Site-A): buat endpoint hub untuk Site-A terlebih dahulu, lalu unduh konfigurasi dari menu Configure. Setelah Site-A ada, penambahan Site-B..N dapat memilih site yang ingin dihubungkan.</p>
+			}
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				@textInput("Nama Site", "name", f.V("name"), "mis. site-jakarta", f.E("name"), "Unik: huruf, angka, _ @ . : -", true)
 				@textInput("Alamat Publik (opsional)", "address", f.V("address"), "IPv4/hostname, kosongkan jika NAT (%any)", f.E("address"), "Kosong = %any (spoke memulai koneksi)", false)
@@ -136,7 +143,7 @@ templ SiteForm(f Form) {
 			@cidrListMax("Subnet LAN Site", "subnets", f.V("subnets"), "192.168.10.0/24\n192.168.11.0/24", f.E("subnets"), "1–16 CIDR IPv4 di belakang site ini (satu per baris atau koma).", true, 16)
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<fieldset class="space-y-2 rounded-lg border border-[#DEE2E6] p-3">
-					<legend class="px-1 text-sm font-semibold">Konektivitas & Peering (Routing/Firewall)</legend>
+					<legend class="px-1 text-sm font-semibold">Konektivitas &amp; Peering (Routing/Firewall)</legend>
 					<div>
 						<input type="hidden" name="allow_vpc" value="0"/>
 						<label class="flex items-center gap-2 text-sm font-semibold">
@@ -148,7 +155,7 @@ templ SiteForm(f Form) {
 						<input type="hidden" name="nat" value="0"/>
 						<label class="flex items-center gap-2 text-sm font-semibold">
 							<input type="checkbox" name="nat" value="on" checked?={ f.V("nat") != "" } class="h-4 w-4 accent-[#2F6BC4]"/>
-							NAT / masquerade di sisi spoke
+							NAT / masquerade di sisi site
 						</label>
 					</div>
 					<div>
@@ -159,16 +166,17 @@ templ SiteForm(f Form) {
 						</label>
 					</div>
 					<div class="mt-2">
-						<div class="text-xs font-semibold text-[#212529]">Terhubung ke Site Lain (Peer Sites — default-deny):</div>
+						<div class="text-xs font-semibold text-[#212529]">Pilih Site Tujuan yang Boleh Terhubung (Peer Sites — default-deny):</div>
 						if len(f.OtherSites()) == 0 {
-							<p class="mt-1 text-xs text-[#6C757D]">Belum ada site lain. Setelah menambah site kedua, Anda bisa memilih konektivitas antar-site di sini.</p>
+							<p class="mt-1 text-xs text-[#6C757D]">Belum ada site lain. Setelah site kedua ditambahkan, daftar site &amp; subnet di belakangnya akan tampil di sini.</p>
 						} else {
-							<div class="mt-2 space-y-1">
+							<div class="mt-2 space-y-2">
 								for _, other := range f.OtherSites() {
-									<label class="flex items-center gap-2 text-sm">
+									<label class="flex flex-wrap items-center gap-2 text-sm">
 										<input type="checkbox" name="peer_sites" value={ itoa(other.ID) } checked?={ f.Checked("peer_sites", other.ID) } class="h-4 w-4 accent-[#2F6BC4]"/>
 										<span class="font-semibold">{ other.Name }</span>
-										<span class="font-mono text-xs text-[#6C757D]">({ string(other.Subnets) })</span>
+										<span class="font-mono text-xs text-[#6C757D]">({ model.Join(other.EffectiveSubnetList()) })</span>
+										@Badge(other.OnlineLabel())
 									</label>
 								}
 							</div>
@@ -176,17 +184,20 @@ templ SiteForm(f Form) {
 					</div>
 				</fieldset>
 				<fieldset class="space-y-3 rounded-lg border border-[#DEE2E6] p-3">
-					<legend class="px-1 text-sm font-semibold">Autentikasi & Crypto IKEv2</legend>
+					<legend class="px-1 text-sm font-semibold">Autentikasi &amp; Crypto IKEv2 (FIPS)</legend>
 					<label class="block text-sm font-semibold">
 						Metode Auth
 						<select name="auth_method" class={ inputClass(f.E("auth_method")) }>
 							<option value="psk" selected?={ f.V("auth_method") != "pubkey" }>Pre-Shared Key (PSK)</option>
 							<option value="pubkey" selected?={ f.V("auth_method") == "pubkey" }>Sertifikat X.509 (Pubkey)</option>
 						</select>
+						if f.E("auth_method") != "" {
+							<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("auth_method") }</span>
+						}
 					</label>
-					if len(f.Certs) > 0 {
-						<label class="block text-xs font-semibold text-[#495057]">
-							Sertifikat Site (bila Auth X.509)
+					<label class="block text-xs font-semibold text-[#495057]">
+						Sertifikat Site (bila Auth X.509)
+						if hasCertType(f.Certs, "site") {
 							<select name="cert_id" class={ inputClass(f.E("cert_id")) }>
 								<option value="">— Pilih sertifikat site —</option>
 								for _, cert := range f.Certs {
@@ -195,8 +206,13 @@ templ SiteForm(f Form) {
 									}
 								}
 							</select>
-						</label>
-					}
+						} else {
+							<span class="mt-1 block text-xs font-normal text-[#6C757D]">Belum ada sertifikat aktif bertipe site. Terbitkan di tab PKI jika ingin memakai auth X.509.</span>
+						}
+						if f.E("cert_id") != "" {
+							<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("cert_id") }</span>
+						}
+					</label>
 					<label class="block text-xs font-semibold text-[#495057]">
 						IKE Proposals
 						<select name="ike_proposals" class={ inputClass(f.E("ike_proposals")) }>
@@ -227,29 +243,53 @@ templ SiteConfigureModal(d SiteConfigureData) {
 	@ModalWide("Configure Site: " + d.Site.Name) {
 		@ErrorBox(d.Err)
 		if d.Err == "" {
-			<div class="space-y-3 text-sm">
+			<div class="space-y-4 text-sm">
 				<div class="flex flex-wrap items-center gap-2">
 					<span class="font-semibold">{ d.Site.Name }</span>
-					@Badge(d.Site.StatusLabel())
+					@Badge(d.Site.OnlineLabel())
 					@Badge(d.Site.AuthLabel())
-					<span class="font-mono text-xs text-[#6C757D]">IKE ID: { d.Site.IKEID }</span>
+					@Badge("FIPS IKEv2")
 				</div>
-				<div class="rounded-lg bg-[#F8F9FA] p-3 font-mono text-xs space-y-1">
-					<div><strong>Subnet Lokal Site:</strong> { string(d.Site.Subnets) }</div>
+				<div class="rounded-lg bg-[#F8F9FA] p-4 font-mono text-xs space-y-1">
+					<div><strong>Hub Public IP (Remote GW):</strong> { ternary(d.HubPublicIP != "", d.HubPublicIP, "—") } · UDP 500 &amp; 4500 (NAT-T)</div>
+					<div><strong>Remote ID (Hub):</strong> { ternary(d.HubPublicIP != "", d.HubPublicIP, "—") } · <strong>Local ID (Site):</strong> { d.Site.IKEID }</div>
+					<div><strong>Phase 1 (IKEv2):</strong> { ternary(d.Site.IKEProposals != "", d.Site.IKEProposals, "aes256-sha256-modp2048") } · DPD { itoa(d.Site.DPDDelay) }s</div>
+					<div><strong>Phase 2 (ESP):</strong> { ternary(d.Site.ESPProposals != "", d.Site.ESPProposals, "aes256-sha256") } · Tunnel Mode · MSS 1300</div>
+					<div><strong>Subnet Lokal Site:</strong> { model.Join(d.Site.EffectiveSubnetList()) } · <strong>NAT Spoke:</strong> { ternary(d.Site.NATOn(), "aktif", "nonaktif") }</div>
 					<div><strong>Subnet Remote via Hub:</strong> { string(d.Site.HubLocalTS) }</div>
+					<div><strong>Last Connect:</strong> { d.Site.LastConnectDisplay() }</div>
 					if len(d.PeerNames) > 0 {
 						<div><strong>Terhubung ke Site:</strong> { model.Join(d.PeerNames) }</div>
 					}
+					if d.Cert != nil {
+						<div><strong>Sertifikat Site:</strong> { d.Cert.Name } (SAN: { d.Cert.SAN } · Serial #{ d.Cert.Serial })</div>
+					}
 				</div>
-				<div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-					<a href={ templ.URL(siteDownloadURL(d.Site.ID, "script")) } download class="rounded-lg bg-[#2F6BC4] px-3 py-2.5 text-center font-semibold text-white hover:bg-[#2559A8]">Linux Script (.sh)</a>
-					<a href={ templ.URL(siteDownloadURL(d.Site.ID, "swanctl")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">strongSwan (.conf)</a>
-					<a href={ templ.URL(siteDownloadURL(d.Site.ID, "mikrotik")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">MikroTik v7 (.rsc)</a>
-					<a href={ templ.URL(siteDownloadURL(d.Site.ID, "fortigate")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">FortiGate (.conf)</a>
-					<a href={ templ.URL(siteDownloadURL(d.Site.ID, "cisco")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Cisco IOS-XE (.cfg)</a>
+				<div>
+					<div class="mb-2 text-xs font-semibold text-[#495057]">Unduh File Konfigurasi Sisi Perangkat (Berisi Parameter Lengkap + PSK/Setup)</div>
+					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "generic")) } download class="rounded-lg bg-[#2F6BC4] px-3 py-2.5 text-center font-semibold text-white hover:bg-[#2559A8]">Enterprise Manual / Switch / Firewall (.conf)</a>
+						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "mikrotik")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">MikroTik RouterOS v7 (.rsc)</a>
+						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "fortigate")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">FortiGate FortiOS (.conf)</a>
+						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "cisco")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Cisco IOS-XE (.cfg)</a>
+						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "script")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Linux Auto-Setup Script (.sh)</a>
+						<a href={ templ.URL(siteDownloadURL(d.Site.ID, "swanctl")) } download class="rounded-lg border border-[#CED4DA] px-3 py-2.5 text-center font-semibold text-[#212529] hover:bg-[#F8F9FA]">Linux strongSwan (.conf)</a>
+					</div>
 				</div>
-				<p class="rounded-md bg-[#FFF4E5] px-3 py-2 text-xs text-[#5C3B00]">
-					Catatan: Bila Anda menambah site peer baru atau mengizinkan user C2S baru mengakses site ini, <strong>Subnet Remote via Hub</strong> akan bertambah — unduh dan terapkan ulang konfigurasi pada perangkat site ini agar Traffic Selector IKEv2 cocok di kedua sisi.
+				<div class="rounded-lg border border-[#DEE2E6] p-3">
+					<div class="mb-2 text-xs font-semibold text-[#495057]">Sertifikat X.509 (Root CA &amp; Sertifikat Site)</div>
+					<div class="flex flex-wrap gap-2">
+						<a href="/unduh/pki/ca.crt" download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Download Root CA (.crt)</a>
+						<a href="/unduh/pki/ca.pem" download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Root CA (.pem)</a>
+						if d.Site.CertID != nil {
+							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.Site.CertID) + "/cert.crt") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Site Cert (.crt)</a>
+							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.Site.CertID) + "/key.key") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Private Key (.key)</a>
+							<a href={ templ.URL("/unduh/pki/certs/" + itoa(*d.Site.CertID) + "/bundle.p12") } download class="rounded-full border border-[#1A73E8] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Bundle PKCS#12 (.p12)</a>
+						}
+					</div>
+				</div>
+				<p class="rounded-md bg-[#E8EEF9] px-3 py-2 text-xs text-[#2C3E87]">
+					<strong>Zero-Touch Narrowing (Linux strongSwan):</strong> Script Linux (<code>.sh</code>) &amp; <code>swanctl.conf</code> memakai IKEv2 narrowing otomatis — saat Site-B..N atau C2S baru diizinkan mengakses site ini, Hub memicu renegosiasi otomatis tanpa perlu menjalankan ulang script di site ini. Untuk router statis (MikroTik / FortiGate / Cisco / Switch), unduh &amp; tambahkan subnet remote baru bila peering berubah.
 				</p>
 			</div>
 		}
@@ -337,7 +377,7 @@ templ GroupForm(f Form) {
 						<label class="flex items-center gap-2 text-sm">
 							<input type="checkbox" name="allowed_sites" value={ itoa(st.ID) } checked?={ f.Checked("allowed_sites", st.ID) } class="h-4 w-4 accent-[#2F6BC4]"/>
 							<span class="font-semibold">{ st.Name }</span>
-							<span class="font-mono text-xs text-[#6C757D]">({ string(st.Subnets) })</span>
+							<span class="font-mono text-xs text-[#6C757D]">({ model.Join(st.EffectiveSubnetList()) })</span>
 						</label>
 					}
 				</fieldset>
@@ -445,9 +485,12 @@ templ RouteForm(f Form) {
 					<select name="site_id" class={ inputClass(f.E("site_id")) }>
 						<option value="">— Tanpa site (route lokal Linux) —</option>
 						for _, st := range f.Sites {
-							<option value={ itoa(st.ID) } selected?={ f.V("site_id") == itoa(st.ID) }>{ st.Name } ({ string(st.Subnets) })</option>
+							<option value={ itoa(st.ID) } selected?={ f.V("site_id") == itoa(st.ID) }>{ st.Name } ({ model.Join(st.EffectiveSubnetList()) })</option>
 						}
 					</select>
+					if f.E("site_id") != "" {
+						<span class="mt-1 block text-xs font-normal text-[#B3261E]">{ f.E("site_id") }</span>
+					}
 				</label>
 			}
 			@field("Metric", "metric", ternary(f.V("metric") != "", f.V("metric"), "100"), "text", f.E("metric"), "1–65535 (default 100)", false)
@@ -482,6 +525,7 @@ templ PKIContent(d PKIPageData) {
 					<div class="break-words">SHA-256: { mapStr(d.CA, "sha256_fingerprint") }</div>
 				</div>
 				<div class="mt-2 flex flex-wrap gap-2">
+					<a href="/unduh/pki/ca.crt" download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Download CA (.crt)</a>
 					<a href="/unduh/pki/ca.pem" download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Download CA (.pem)</a>
 					<a href="/unduh/pki/ca.crl" download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">Download CRL (.crl)</a>
 				</div>
@@ -529,8 +573,10 @@ templ PKIContent(d PKIPageData) {
 									<td class="px-3 py-3">@Badge(cert.StatusLabel())</td>
 									<td class="px-3 py-3">
 										<div class="flex flex-wrap gap-1.5">
-											<a href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/bundle.json") } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">PEM</a>
+											<a href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/cert.crt") } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">.crt</a>
+											<a href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/key.key") } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">.key</a>
 											<a href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/bundle.p12") } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">.p12</a>
+											<a href={ templ.URL("/unduh/pki/certs/" + itoa(cert.ID) + "/bundle.json") } download class="rounded-full border border-[#CED4DA] px-3 py-1 text-xs font-semibold text-[#2F6BC4] hover:bg-[#E8EEF9]">PEM JSON</a>
 											if !cert.Revoked {
 												<button type="button" hx-post={ "/pki/certs/" + itoa(cert.ID) + "/revoke" } hx-confirm="Cabut sertifikat ini sekarang? CRL akan diperbarui dan sesi aktif terkait diputus." hx-target="#pki-content" hx-swap="outerHTML" class="rounded-full border border-[#F5C2C7] px-3 py-1 text-xs font-semibold text-[#B3261E] hover:bg-[#FDECEA]">Revoke</button>
 											}
@@ -666,6 +712,9 @@ templ StatusV2Page(d StatusViewData) {
 				if d.Gateway != nil {
 					<div class="font-mono text-xs text-[#495057] space-y-1">
 						<div>Engine: { mapStr(d.Gateway, "engine") } · API v{ mapStr(d.Gateway, "api_version") }</div>
+						if mapStr(d.Gateway, "fips_profile") != "" {
+							<div>Crypto: { mapStr(d.Gateway, "fips_profile") }</div>
+						}
 						<div>Public IP: { mapStr(d.Gateway, "public_ip") } ({ mapStr(d.Gateway, "public_if") }) · Region: { mapStr(d.Gateway, "region") }</div>
 						<div>LAN VPC: { mapStr(d.Gateway, "lan_cidr") } · VIP Pool: { mapStr(d.Gateway, "pool_cidr") }</div>
 					</div>

@@ -167,39 +167,37 @@ func User(v url.Values, create bool) (map[string]any, Errors) {
 		}
 	}
 
-	// Empty allowed CIDRs:
-	// - When allow_vpc_present is submitted by the UI form, toggle the server's vpc_cidr cleanly in/out of allowed_cidrs.
-	// - When user explicitly chose allowed_sites or groups with blank CIDRs, send [] so user gets ONLY selected sites/groups (no forced VPC).
-	// - Otherwise omit so backend applies its LAN default (create) or keeps stored value (edit).
+	// Destination access flags (Enterprise C2S):
+	// - allow_vpc: native backend boolean granting access to gateway VPC/NAT + local static routes (works even with 0 sites).
+	// - allow_all_sites: native backend boolean granting access to all current and future S2S sites.
+	// - allowed_sites / groups / allowed_cidrs: specific sites, groups, and custom CIDRs.
 	cidrs := SplitList(v.Get("allowed_cidrs"))
-	if _, hasVPCField := v["allow_vpc_present"]; hasVPCField {
-		vpcCIDR := get(v, "vpc_cidr")
-		if vpcCIDR == "" {
-			vpcCIDR = DefaultLAN
+	_, hasVPCField := v["allow_vpc_present"]
+	_, hasAllSitesField := v["allow_all_sites_present"]
+	if hasVPCField || hasAllSitesField {
+		wantVPC := false
+		if hasVPCField {
+			wantVPC = Checkbox(v, "allow_vpc", false)
+			body["allow_vpc"] = wantVPC
 		}
-		wantVPC := Checkbox(v, "allow_vpc", false)
-		if wantVPC && ipv4CIDR(vpcCIDR) {
-			found := false
-			for _, c := range cidrs {
-				if c == vpcCIDR {
-					found = true
-					break
-				}
-			}
-			if !found {
-				cidrs = append([]string{vpcCIDR}, cidrs...)
-			}
-		} else if !wantVPC && vpcCIDR != "" {
-			filtered := []string{}
-			for _, c := range cidrs {
-				if c != vpcCIDR {
-					filtered = append(filtered, c)
-				}
-			}
-			cidrs = filtered
+		wantAllSites := false
+		if hasAllSitesField {
+			wantAllSites = Checkbox(v, "allow_all_sites", false)
+			body["allow_all_sites"] = wantAllSites
 		}
-		if len(cidrs) == 0 && len(allowedSites) == 0 && len(groupIDs) == 0 {
-			errs["allowed_cidrs"] = "Pilih minimal satu tujuan akses: VPC server, Allowed CIDRs, Multi-Site S2S, atau Grup C2S"
+		if hasVPCField && !wantVPC {
+			if vpcCIDR := get(v, "vpc_cidr"); vpcCIDR != "" {
+				filtered := []string{}
+				for _, c := range cidrs {
+					if c != vpcCIDR {
+						filtered = append(filtered, c)
+					}
+				}
+				cidrs = filtered
+			}
+		}
+		if !wantVPC && !wantAllSites && len(cidrs) == 0 && len(allowedSites) == 0 && len(groupIDs) == 0 {
+			errs["allowed_cidrs"] = "Pilih minimal satu tujuan akses: VPC / NAT Server, Semua Site, Site S2S tertentu, Allowed CIDRs, atau Grup C2S"
 			return body, errs
 		}
 	} else if len(cidrs) == 0 {

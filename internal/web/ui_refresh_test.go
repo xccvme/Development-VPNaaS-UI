@@ -9,11 +9,14 @@ import (
 
 var toggleRe = regexp.MustCompile(`<button[^>]*data-actions-toggle[^>]*>`)
 
-func TestRowActionMenusIdenticalOnAkunAndKoneksi(t *testing.T) {
+func TestRowActionMenusIdenticalOnAkunAndSites(t *testing.T) {
 	e := setup(t)
 	e.login()
+	e.api.sites = []map[string]any{
+		{"id": 10.0, "name": "site-jkt", "address": "%any", "ike_id": "site-jkt@vpnaas", "subnets": "192.168.10.0/24", "enabled": true, "status": "active", "online": true},
+	}
 	toggles := map[string]string{}
-	for _, p := range []string{"/akun", "/koneksi"} {
+	for _, p := range []string{"/akun", "/sites"} {
 		_, body := e.do("GET", p, nil, nil)
 		if !strings.Contains(body, "data-row-actions") {
 			t.Fatalf("%s: no row action menu", p)
@@ -37,13 +40,13 @@ func TestRowActionMenusIdenticalOnAkunAndKoneksi(t *testing.T) {
 		norm := regexp.MustCompile(`(aria-label|aria-controls)="[^"]*"`).ReplaceAllString(tg, `$1=""`)
 		toggles[p] = norm
 	}
-	if toggles["/akun"] != toggles["/koneksi"] {
-		t.Fatalf("toggle markup differs:\n%s\n%s", toggles["/akun"], toggles["/koneksi"])
+	if toggles["/akun"] != toggles["/sites"] {
+		t.Fatalf("toggle markup differs:\n%s\n%s", toggles["/akun"], toggles["/sites"])
 	}
-	_, body := e.do("GET", "/koneksi", nil, nil)
-	for _, want := range []string{`role="menuitem" hx-get="/koneksi/4/ubah"`, `role="menuitem" hx-post="/koneksi/4/initiate" hx-target="#conn-table" hx-swap="outerHTML"`, `hx-get="/koneksi/4/terminate"`, `hx-get="/koneksi/4/hapus"`} {
+	_, body := e.do("GET", "/sites", nil, nil)
+	for _, want := range []string{`role="menuitem" hx-get="/sites/10/ubah"`, `role="menuitem" hx-post="/sites/10/connect" hx-target="#sites-table" hx-swap="outerHTML"`, `hx-get="/sites/10/disconnect"`, `hx-get="/sites/10/hapus"`} {
 		if !strings.Contains(body, want) {
-			t.Errorf("koneksi action missing %s", want)
+			t.Errorf("sites action missing %s", want)
 		}
 	}
 	_, body = e.do("GET", "/akun", nil, nil)
@@ -81,7 +84,7 @@ var refreshRe = regexp.MustCompile(`(?s)<button[^>]*data-refresh[^>]*>.*?</butto
 func TestRefreshButtonsHaveLoadingState(t *testing.T) {
 	e := setup(t)
 	e.login()
-	for _, p := range []string{"/ringkasan", "/koneksi", "/akun", "/kebijakan", "/status", "/audit"} {
+	for _, p := range []string{"/ringkasan", "/sites", "/akun", "/routing", "/kebijakan", "/status", "/audit"} {
 		_, body := e.do("GET", p, nil, nil)
 		b := refreshRe.FindString(body)
 		if b == "" {

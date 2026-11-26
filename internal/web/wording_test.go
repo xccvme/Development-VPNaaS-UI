@@ -47,35 +47,38 @@ func TestFirewallRulesWording(t *testing.T) {
 func TestConnectDisconnectWording(t *testing.T) {
 	e := setup(t)
 	e.login()
-	_, body := e.do("GET", "/koneksi", nil, nil)
+	e.api.sites = []map[string]any{
+		{"id": 10.0, "name": "site-jkt", "address": "203.0.113.5", "ike_id": "site-jkt@vpnaas", "subnets": "192.168.50.0/24", "enabled": true, "status": "active", "online": true, "last_connected_at": "2026-11-26T10:00:00Z"},
+	}
+	_, body := e.do("GET", "/sites", nil, nil)
 	for _, want := range []string{
-		`hx-post="/koneksi/4/initiate"`, `title="Mulai tunnel ke peer sekarang"`, ">Connect</button>",
-		`hx-get="/koneksi/4/terminate"`, `title="Putus tunnel; bisa connect ulang kapan saja"`, ">Disconnect</button>",
-		">Active<",
+		`hx-post="/sites/10/connect"`, ">Connect</button>",
+		`hx-get="/sites/10/disconnect"`, ">Disconnect</button>",
+		">Online<", "2026-11-26T10:00:00Z",
 	} {
 		if !strings.Contains(body, want) {
-			t.Errorf("/koneksi missing %q", want)
+			t.Errorf("/sites missing %q", want)
 		}
 	}
 	if strings.Contains(body, ">Initiate<") || strings.Contains(body, ">Terminate<") {
 		t.Error("old Initiate/Terminate labels remain")
 	}
-	_, modal := e.do("GET", "/koneksi/4/terminate", nil, map[string]string{"HX-Request": "true"})
-	for _, want := range []string{"Disconnect koneksi", "bisa connect ulang kapan saja", `hx-post="/koneksi/4/terminate"`, ">Disconnect</button>"} {
+	_, modal := e.do("GET", "/sites/10/disconnect", nil, map[string]string{"HX-Request": "true"})
+	for _, want := range []string{"Disconnect Site S2S", `hx-post="/sites/10/disconnect"`, ">Disconnect</button>"} {
 		if !strings.Contains(modal, want) {
 			t.Errorf("disconnect modal missing %q", want)
 		}
 	}
-	_, out := e.do("POST", "/koneksi/4/initiate", nil, e.safe())
-	if !strings.Contains(out, "Connect koneksi branch berhasil") {
+	_, out := e.do("POST", "/sites/10/connect", nil, e.safe())
+	if !strings.Contains(out, "Connect site #10 berhasil") {
 		t.Errorf("connect flash: %s", out)
 	}
-	_, out = e.do("POST", "/koneksi/4/terminate", nil, e.safe())
-	if !strings.Contains(out, "Disconnect koneksi branch berhasil") {
+	_, out = e.do("POST", "/sites/10/disconnect", nil, e.safe())
+	if !strings.Contains(out, "Disconnect site #10 berhasil") {
 		t.Errorf("disconnect flash: %s", out)
 	}
-	e.api.failPaths["connections/4/initiate"] = 500
-	_, out = e.do("POST", "/koneksi/4/initiate", nil, e.safe())
+	e.api.failPaths["sites/10/connect"] = 500
+	_, out = e.do("POST", "/sites/10/connect", nil, e.safe())
 	if !strings.Contains(out, "Connect gagal") {
 		t.Errorf("connect error flash: %s", out)
 	}
@@ -84,44 +87,34 @@ func TestConnectDisconnectWording(t *testing.T) {
 func TestS2SFormSubnets(t *testing.T) {
 	e := setup(t)
 	e.login()
-	_, form := e.do("GET", "/koneksi/baru?topology=direct", nil, map[string]string{"HX-Request": "true"})
-	for _, want := range []string{"Subnet LAN lokal (server ini)", "Subnet LAN remote (site lawan)", "Isi subnet yang boleh saling akses lewat tunnel. Di site lawan isinya dibalik.", "Remote ID", "PSK"} {
+	_, form := e.do("GET", "/sites/baru", nil, map[string]string{"HX-Request": "true"})
+	for _, want := range []string{"Subnet LAN Site", "IKE ID (opsional)", "PSK", "FIPS"} {
 		if !strings.Contains(form, want) {
 			t.Errorf("S2S form missing %q", want)
 		}
 	}
-	for _, name := range []string{"local_ts", "remote_ts"} {
-		ta := regexp.MustCompile(`(?s)<textarea[^>]*name="` + name + `"[^>]*>(.*?)</textarea>`).FindStringSubmatch(form)
-		if ta == nil || strings.TrimSpace(ta[1]) != "" || !strings.Contains(ta[0], "placeholder=") {
-			t.Errorf("%s must be an empty textarea with placeholder: %v", name, ta)
-		}
+	ta := regexp.MustCompile(`(?s)<textarea[^>]*name="subnets"[^>]*>(.*?)</textarea>`).FindStringSubmatch(form)
+	if ta == nil || strings.TrimSpace(ta[1]) != "" || !strings.Contains(ta[0], "placeholder=") {
+		t.Errorf("subnets must be an empty textarea with placeholder: %v", ta)
 	}
-	res, _ := e.do("POST", "/koneksi", url.Values{"name": {"tmp2"}, "remote_address": {"198.51.100.8"}, "local_ts": {"10.10.7.0/24"}, "remote_ts": {"192.168.77.0/24\n192.168.78.0/24"}, "psk": {"pre-shared-key"}, "enabled": {"on"}}, e.safe())
+	res, _ := e.do("POST", "/sites", url.Values{"name": {"tmp2"}, "address": {"198.51.100.8"}, "subnets": {"192.168.77.0/24\n192.168.78.0/24"}, "allow_vpc": {"0", "on"}, "nat": {"0", "on"}, "encap": {"0", "on"}, "enabled": {"on"}}, e.safe())
 	last := e.api.bodies[len(e.api.bodies)-1]
-	if res.StatusCode != 200 || last["remote_ts"] != "192.168.77.0/24,192.168.78.0/24" || last["local_ts"] != "10.10.7.0/24" {
+	if res.StatusCode != 200 || last["subnets"] != "192.168.77.0/24,192.168.78.0/24" {
 		t.Fatalf("multi CIDR body: %d %v", res.StatusCode, last)
 	}
 	// edit form splits the stored comma list back to one CIDR per line
-	_, edit := e.do("GET", "/koneksi/21/ubah", nil, map[string]string{"HX-Request": "true"})
+	_, edit := e.do("GET", "/sites/21/ubah", nil, map[string]string{"HX-Request": "true"})
 	if !strings.Contains(edit, "192.168.77.0/24\n192.168.78.0/24</textarea>") {
 		t.Errorf("edit textarea must show one CIDR per line: %s", edit)
 	}
-	_, table := e.do("GET", "/koneksi", nil, nil)
-	cell := regexp.MustCompile(`(?s)<td[^>]*data-subnets[^>]*>.*?</td>`).FindAllString(table, -1)
-	if len(cell) != 2 || !strings.Contains(cell[1], "192.168.77.0/24") || !strings.Contains(cell[1], "192.168.78.0/24") || !strings.Contains(cell[1], "↔") {
-		t.Errorf("subnet cell: %v", cell)
-	}
-	if !strings.Contains(table, ">Subnet (lokal ↔ remote)</th>") {
-		t.Error("subnet column header")
-	}
 }
 
-func TestKoneksiRoutingInfoBox(t *testing.T) {
+func TestSitesRoutingInfoBox(t *testing.T) {
 	e := setup(t)
 	e.login()
-	_, body := e.do("GET", "/koneksi", nil, nil)
+	_, body := e.do("GET", "/sites", nil, nil)
 	box := regexp.MustCompile(`(?s)<details[^>]*data-s2s-info.*?</details>`).FindString(body)
-	for _, want := range []string{"<summary", "route", "LAN IP", "allowed-address-pairs", "port security"} {
+	for _, want := range []string{"<summary", "Site-A", "NAT", "allowed-address-pairs", "port security"} {
 		if !strings.Contains(box, want) {
 			t.Errorf("info box missing %q: %s", want, box)
 		}

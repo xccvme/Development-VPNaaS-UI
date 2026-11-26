@@ -25,80 +25,57 @@ templ OverviewPage(o Overview) {
 	</div>
 	<div class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
 		<section class="flex flex-col rounded-xl border border-[#DEE2E6]">
-			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Akun C2S</h2>
+			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Site-to-Site (S2S)</h2>
+			if len(o.Sites) == 0 {
+				@Empty("Belum ada Site S2S", "Tambahkan Site-A pertama, lalu tambahkan Site-B..N dan pilih site yang ingin dihubungkan.")
+			} else {
+				<ul class="divide-y divide-[#DEE2E6]">
+					for _, st := range o.Sites {
+						<li class="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
+							<div>
+								<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
+									@Dot(st.OnlineLabel())
+									{ st.Name }
+								</span>
+								<div class="mt-1 font-mono text-xs text-[#6C757D]">{ model.Join(st.EffectiveSubnetList()) }</div>
+							</div>
+							<div>
+								<span class="flex flex-wrap items-center justify-end gap-2">
+									@Badge(st.AdminLabel())
+									@Badge(st.OnlineLabel())
+								</span>
+								<div class="mt-1 text-xs text-[#6C757D]">Last connect: { st.LastConnectDisplay() }</div>
+							</div>
+						</li>
+					}
+				</ul>
+			}
+			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/sites" class="font-semibold text-[#1A73E8]">Kelola Site-to-Site (S2S) →</a></div>
+		</section>
+		<section class="flex flex-col rounded-xl border border-[#DEE2E6]">
+			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Client-to-Site (C2S)</h2>
 			if len(o.Users) == 0 {
-				@Empty("Belum ada data akun", "Data akun tidak tersedia atau belum dibuat.")
+				@Empty("Belum ada akun C2S", "Buat akun C2S untuk akses ke VPC server atau site S2S tertentu.")
 			} else {
 				<ul class="divide-y divide-[#DEE2E6]">
 					for _, u := range o.Users {
 						<li class="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
 							<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
-								@Dot(u.RuntimeLabel())
+								@Dot(u.OnlineLabel())
 								{ u.Username }
 							</span>
 							<span class="flex flex-wrap items-center gap-2">
 								@Badge(u.AdminLabel())
-								@Badge(u.RuntimeLabel())
+								@Badge(u.OnlineLabel())
 								<span class="font-mono text-xs text-[#6C757D]">{ model.Join(u.VirtualIPs) }</span>
 							</span>
 						</li>
 					}
 				</ul>
 			}
-			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/akun" class="font-semibold text-[#1A73E8]">Kelola akun →</a></div>
-		</section>
-		<section class="flex flex-col rounded-xl border border-[#DEE2E6]">
-			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">VPN Hub</h2>
-			if len(o.Connections) == 0 {
-				@Empty("Belum ada VPN Hub", "Buat VPN Hub untuk menghubungkan LAN Site-A dan Site-B lewat server ini.")
-			} else {
-				<ul class="divide-y divide-[#DEE2E6]">
-					for _, c := range o.Connections {
-						<li class="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
-							<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
-								@Dot(c.Runtime)
-								{ c.Name }
-							</span>
-							<span class="flex flex-wrap gap-2">
-								@Badge(c.AdminLabel())
-								if c.IsHub() {
-									<span class="text-xs text-[#6C757D]">A</span>
-									@Badge(c.A().StatusLabel())
-									<span class="text-xs text-[#6C757D]">B</span>
-									@Badge(c.B().StatusLabel())
-								} else {
-									@Badge("Direct (lama)")
-									@Badge(c.Runtime)
-								}
-							</span>
-						</li>
-					}
-				</ul>
-			}
-			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/koneksi" class="font-semibold text-[#1A73E8]">Kelola VPN Hub →</a></div>
+			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/akun" class="font-semibold text-[#1A73E8]">Kelola Client-to-Site (C2S) →</a></div>
 		</section>
 	</div>
-	if len(o.Sites) > 0 {
-		<section class="mt-6 flex flex-col rounded-xl border border-[#DEE2E6]">
-			<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Multi-Site S2S (Hub & Spoke)</h2>
-			<ul class="divide-y divide-[#DEE2E6]">
-				for _, st := range o.Sites {
-					<li class="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
-						<span class="flex items-center gap-2 font-semibold text-[#2F6BC4]">
-							@Dot(st.StatusLabel())
-							{ st.Name }
-						</span>
-						<span class="flex flex-wrap items-center gap-2">
-							@Badge(st.AdminLabel())
-							@Badge(st.StatusLabel())
-							<span class="font-mono text-xs text-[#6C757D]">{ string(st.Subnets) }</span>
-						</span>
-					</li>
-				}
-			</ul>
-			<div class="mt-auto border-t border-[#DEE2E6] px-5 py-3 text-sm"><a href="/sites" class="font-semibold text-[#1A73E8]">Kelola Multi-Site S2S →</a></div>
-		</section>
-	}
 	<section class="mt-6 rounded-xl border border-[#DEE2E6]">
 		<h2 class="border-b border-[#DEE2E6] px-5 py-4 text-base font-semibold">Info gateway</h2>
 		@KVList(o.Info)

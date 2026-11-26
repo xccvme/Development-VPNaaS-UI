@@ -65,7 +65,7 @@ templ Layout(p Page, content templ.Component) {
 					<img src={ "/static/vpn-logo.png?v=" + AssetVersion } alt="Logo VPNaaS" width="44" height="44" class="h-11 w-11 shrink-0 object-contain"/>
 					<div>
 						<div class="text-lg font-bold leading-tight">VPNaaS</div>
-						<div class="text-xs text-white/70">Console PoC</div>
+						<div class="text-xs text-white/70">Enterprise Dev Console</div>
 					</div>
 				</div>
 				<nav class="mt-4 flex-1 space-y-1 overflow-y-auto px-3" aria-label="Navigasi utama">
@@ -84,7 +84,7 @@ templ Layout(p Page, content templ.Component) {
 						</a>
 					}
 				</nav>
-				<div class="px-6 py-4 text-xs text-white/60">IPsec IKEv2 · strongSwan</div>
+				<div class="px-6 py-4 text-xs text-white/60">FIPS · IPsec/IKEv2 · strongSwan</div>
 			</aside>
 			<div id="backdrop" class="fixed inset-0 z-30 hidden bg-black/30 lg:hidden" data-sidebar-close></div>
 			<div class="lg:pl-[260px]">
@@ -92,7 +92,7 @@ templ Layout(p Page, content templ.Component) {
 					<button type="button" class="rounded-md p-2 text-[#2F6BC4] hover:bg-[#F1F3F5] lg:hidden" data-sidebar-toggle aria-label="Buka menu">
 						@icon("menu")
 					</button>
-					<div class="hidden text-sm text-[#6C757D] lg:block">VPN as a Service · Proof of Concept</div>
+					<div class="hidden text-sm text-[#6C757D] lg:block">Enterprise VPN as a Service · IPsec/IKEv2 (FIPS)</div>
 					<div class="flex items-center gap-3">
 						<span class="hidden items-center gap-2 text-sm text-[#495057] sm:flex">
 							<span class="grid h-8 w-8 place-items-center rounded-full bg-[#E8EEF9] font-semibold text-[#2F6BC4]">A</span>
@@ -135,11 +135,10 @@ templ PageHeader(title, subtitle string, action templ.Component) {
 
 templ VPNTabs(active string) {
 	<div class="no-scrollbar mb-6 flex gap-6 overflow-x-auto overflow-y-hidden border-b border-[#DEE2E6] text-[15px]" role="tablist">
-		@tab("sites", "Multi-Site S2S", "/sites", active)
-		@tab("koneksi", "VPN Hub", "/koneksi", active)
-		@tab("akun", "Akun C2S", "/akun", active)
+		@tab("sites", "Site-to-Site (S2S)", "/sites", active)
+		@tab("akun", "Client-to-Site (C2S)", "/akun", active)
 		@tab("grup", "Grup C2S", "/grup", active)
-		@tab("routing", "Routing", "/routing", active)
+		@tab("routing", "Static Routing", "/routing", active)
 		@tab("kebijakan", "Firewall Rules", "/kebijakan", active)
 		@tab("pki", "PKI", "/pki", active)
 	</div>

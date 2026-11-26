@@ -6,17 +6,34 @@ import (
 	"testing"
 )
 
+var hx = map[string]string{"HX-Request": "true"}
+
 func TestV2MultiSiteIncrementalPeeringAndVendorDownloads(t *testing.T) {
 	e := setup(t)
 	e.login()
 
-	// Empty state
-	res, body := e.do("GET", "/sites", nil, nil)
-	if res.StatusCode != 200 || !strings.Contains(body, "Multi-Site S2S (Hub &amp; Spoke)") || !strings.Contains(body, "Belum ada Multi-Site S2S") {
-		t.Fatalf("/sites empty: %d", res.StatusCode)
+	// Legacy /koneksi redirects cleanly to /sites
+	res, _ := e.do("GET", "/koneksi", nil, nil)
+	if res.StatusCode != 303 || res.Header.Get("Location") != "/sites" {
+		t.Fatalf("/koneksi redirect: %d %s", res.StatusCode, res.Header.Get("Location"))
 	}
 
-	// Step 1: Create Site-A first
+	// Empty state
+	res, body := e.do("GET", "/sites", nil, nil)
+	if res.StatusCode != 200 || !strings.Contains(body, "Site-to-Site (S2S)") || !strings.Contains(body, "Belum ada Site S2S") {
+		t.Fatalf("/sites empty: %d", res.StatusCode)
+	}
+	if strings.Contains(body, "VPN Hub") || strings.Contains(body, "Direct (lama)") {
+		t.Fatalf("legacy UI wording leaked into /sites")
+	}
+
+	// Step 1: First site form shows Site-A onboarding note (1 site first, no 2-site requirement)
+	_, firstForm := e.do("GET", "/sites/baru", nil, hx)
+	if !strings.Contains(firstForm, "Site pertama (Site-A)") {
+		t.Fatalf("first site form missing onboarding note: %s", firstForm)
+	}
+
+	// Create Site-A first
 	res, body = e.do("POST", "/sites", url.Values{
 		"name": {"site-a"}, "subnets": {"192.168.10.0/24"},
 		"allow_vpc": {"0", "on"}, "nat": {"0", "on"}, "encap": {"0", "on"}, "enabled": {"on"},
@@ -28,18 +45,21 @@ func TestV2MultiSiteIncrementalPeeringAndVendorDownloads(t *testing.T) {
 	e.api.sites[0]["ike_id"] = "site-a@vpnaas"
 	e.api.sites[0]["hub_local_ts"] = "10.10.7.0/24"
 	e.api.sites[0]["status"] = "active"
+	e.api.sites[0]["online"] = true
+	e.api.sites[0]["connection_state"] = "online"
+	e.api.sites[0]["last_connected_at"] = "2026-11-26T12:00:00Z"
 
-	// Step 2: Open create form for Site-B — must show Site-A as peer checkbox!
+	// Step 2: Open create form for Site-B — must show Site-A + subnet + Online badge as peer checkbox!
 	_, form := e.do("GET", "/sites/baru", nil, hx)
-	if !strings.Contains(form, `name="peer_sites"`) || !strings.Contains(form, "site-a") || !strings.Contains(form, "192.168.10.0/24") {
-		t.Fatalf("site-b create form missing site-a peer checkbox: %s", form)
+	if !strings.Contains(form, `name="peer_sites"`) || !strings.Contains(form, "site-a") || !strings.Contains(form, "192.168.10.0/24") || !strings.Contains(form, "Online") {
+		t.Fatalf("site-b create form missing site-a peer checkbox/status: %s", form)
 	}
 
 	// Create Site-B peered with Site-A
 	res, _ = e.do("POST", "/sites", url.Values{
 		"name": {"site-b"}, "subnets": {"192.168.20.0/24"},
 		"allow_vpc": {"0", "on"}, "nat": {"0", "on"}, "encap": {"0", "on"},
-		"peer_sites": {strings.TrimSpace(strFromMap(map[string]any{"id": ""}, "id") + "21")}, "enabled": {"on"},
+		"peer_sites": {"21"}, "enabled": {"on"},
 	}, e.safe())
 	if res.StatusCode != 200 {
 		t.Fatalf("create site-b: %d", res.StatusCode)
@@ -50,25 +70,27 @@ func TestV2MultiSiteIncrementalPeeringAndVendorDownloads(t *testing.T) {
 		t.Fatalf("site-b peer_sites body: %#v", last)
 	}
 
-	// Table shows Site-A and peering pill
+	// Table shows Site-A Online + last_connected_at, Site-B Offline + Belum pernah terkoneksi, and peering pills
 	e.api.sites[0]["peer_sites"] = []any{float64(siteAID + 1)}
 	e.api.sites[1]["peer_sites"] = []any{float64(siteAID)}
 	e.api.sites[1]["hub_local_ts"] = "10.10.7.0/24,192.168.10.0/24"
+	e.api.sites[1]["status"] = "down"
+	e.api.sites[1]["online"] = false
 	_, table := e.do("GET", "/sites/tabel", nil, hx)
-	for _, want := range []string{"site-a", "site-b", "⇄ site-a", "⇄ site-b", "Remote TS: 10.10.7.0/24,192.168.10.0/24"} {
+	for _, want := range []string{"site-a", "site-b", "Online", "Offline", "2026-11-26T12:00:00Z", "Belum pernah terkoneksi", "⇄ site-a", "⇄ site-b", "Remote TS: 10.10.7.0/24,192.168.10.0/24"} {
 		if !strings.Contains(table, want) {
 			t.Errorf("/sites/tabel missing %q", want)
 		}
 	}
 
-	// Configure modal & multi-vendor downloads
+	// Configure modal & multi-vendor downloads (including Enterprise generic .conf & Root CA .crt)
 	_, cfgModal := e.do("GET", "/sites/21/configure", nil, hx)
-	for _, want := range []string{"Configure Site: site-a", "/unduh/sites/21/script", "/unduh/sites/21/mikrotik", "/unduh/sites/21/fortigate", "/unduh/sites/21/cisco"} {
+	for _, want := range []string{"Configure Site: site-a", "192.0.2.10", "2026-11-26T12:00:00Z", "/unduh/sites/21/generic", "/unduh/sites/21/script", "/unduh/sites/21/mikrotik", "/unduh/sites/21/fortigate", "/unduh/sites/21/cisco", "/unduh/pki/ca.crt"} {
 		if !strings.Contains(cfgModal, want) {
 			t.Errorf("configure modal missing %q", want)
 		}
 	}
-	for _, vendor := range []string{"script", "swanctl", "mikrotik", "fortigate", "cisco"} {
+	for _, vendor := range []string{"generic", "script", "swanctl", "mikrotik", "fortigate", "cisco"} {
 		res, body := e.do("GET", "/unduh/sites/21/"+vendor, nil, nil)
 		if res.StatusCode != 200 || !strings.Contains(body, "vendor="+vendor) || res.Header.Get("Cache-Control") != "no-store" {
 			t.Errorf("download vendor %s: %d %q", vendor, res.StatusCode, body)
@@ -85,26 +107,34 @@ func TestV2MultiSiteIncrementalPeeringAndVendorDownloads(t *testing.T) {
 func TestV2C2SSelectiveSiteAccessProfilesAndDisconnect(t *testing.T) {
 	e := setup(t)
 	e.login()
+
+	// Mode 0: When 0 S2S sites exist, C2S form shows clear VPC/NAT-only guidance!
+	_, formNoSites := e.do("GET", "/akun/baru", nil, hx)
+	if !strings.Contains(formNoSites, "Belum ada Site S2S terdaftar") || !strings.Contains(formNoSites, `name="allow_vpc"`) {
+		t.Fatalf("0-site user form missing VPC guidance: %s", formNoSites)
+	}
+
 	e.api.sites = []map[string]any{
-		{"id": 10.0, "name": "site-jkt", "subnets": "192.168.10.0/24", "enabled": true},
-		{"id": 11.0, "name": "site-sby", "subnets": "192.168.20.0/24", "enabled": true},
+		{"id": 10.0, "name": "site-jkt", "subnets": "192.168.10.0/24", "enabled": true, "status": "active", "online": true},
+		{"id": 11.0, "name": "site-sby", "subnets": "192.168.20.0/24", "enabled": true, "status": "down", "online": false},
 	}
 	e.api.groups = []map[string]any{
 		{"id": 30.0, "name": "ops-team", "allowed_cidrs": []any{"10.10.7.0/24"}, "allowed_sites": []any{10.0}, "enabled": true},
 	}
 
-	// Create user form shows VPC toggle, Multi-Site checkboxes and Group checkboxes
+	// Create user form shows VPC toggle, All Sites toggle, Multi-Site checkboxes with status, and Group checkboxes
 	_, form := e.do("GET", "/akun/baru", nil, hx)
-	for _, want := range []string{"Tujuan Akses Client", `name="allow_vpc"`, "10.10.7.0/24", "Akses Multi-Site S2S", "site-jkt", "site-sby", `name="allowed_sites"`, "ops-team", `name="groups"`} {
+	for _, want := range []string{"Tujuan Akses Client", `name="allow_vpc"`, `name="allow_all_sites"`, "10.10.7.0/24", "site-jkt", "site-sby", "Online", "Offline", `name="allowed_sites"`, "ops-team", `name="groups"`} {
 		if !strings.Contains(form, want) {
 			t.Errorf("user form missing %q", want)
 		}
 	}
 
-	// Create C2S user with ONLY site-jkt (unchecking allow_vpc)
+	// Create C2S user with ONLY site-jkt (unchecking allow_vpc & allow_all_sites)
 	res, _ := e.do("POST", "/akun", url.Values{
 		"username": {"field-jkt"}, "password": {"Secret-123"},
 		"allow_vpc_present": {"1"}, "vpc_cidr": {"10.10.7.0/24"}, "allow_vpc": {"0"},
+		"allow_all_sites_present": {"1"}, "allow_all_sites": {"0"},
 		"allowed_cidrs": {""}, "allowed_sites_present": {"1"}, "allowed_sites": {"10"},
 		"enabled": {"on"},
 	}, e.safe())
@@ -112,18 +142,15 @@ func TestV2C2SSelectiveSiteAccessProfilesAndDisconnect(t *testing.T) {
 		t.Fatalf("create site-only user: %d", res.StatusCode)
 	}
 	last := e.api.bodies[len(e.api.bodies)-1]
-	cidrs, ok := last["allowed_cidrs"].([]any)
-	if !ok || len(cidrs) != 0 {
-		t.Fatalf("expected explicit empty allowed_cidrs for site-only user, got %#v", last)
+	if last["allow_vpc"] != false || last["allow_all_sites"] != false {
+		t.Fatalf("expected allow_vpc=false & allow_all_sites=false, got %#v", last)
 	}
 	asites, _ := last["allowed_sites"].([]any)
 	if len(asites) != 1 || int(asites[0].(float64)) != 10 {
 		t.Fatalf("expected allowed_sites=[10], got %#v", last)
 	}
 
-	// Edit that site-only user -> enable VPC + switch to site-sby!
-	uid := strFromMap(map[string]any{}, "")
-	_ = uid
+	// Edit that site-only user -> enable VPC + ALL SITES ("semuanya site + VPC")!
 	_, editForm := e.do("GET", "/akun/21/ubah", nil, hx)
 	if strings.Contains(editForm, `name="allow_vpc" value="on" checked`) {
 		t.Errorf("site-only user edit form must NOT pre-check allow_vpc")
@@ -131,21 +158,30 @@ func TestV2C2SSelectiveSiteAccessProfilesAndDisconnect(t *testing.T) {
 	res, _ = e.do("PUT", "/akun/21", url.Values{
 		"username": {"field-jkt"},
 		"allow_vpc_present": {"1"}, "vpc_cidr": {"10.10.7.0/24"}, "allow_vpc": {"0", "on"},
-		"allowed_cidrs": {""}, "allowed_sites_present": {"1"}, "allowed_sites": {"11"},
+		"allow_all_sites_present": {"1"}, "allow_all_sites": {"0", "on"},
+		"allowed_cidrs": {""}, "allowed_sites_present": {"1"},
 		"enabled": {"on"},
 	}, e.safe())
 	if res.StatusCode != 200 {
 		t.Fatalf("edit user destinations: %d", res.StatusCode)
 	}
 	last = e.api.bodies[len(e.api.bodies)-1]
-	cidrs, _ = last["allowed_cidrs"].([]any)
-	asites, _ = last["allowed_sites"].([]any)
-	if len(cidrs) != 1 || cidrs[0] != "10.10.7.0/24" || len(asites) != 1 || int(asites[0].(float64)) != 11 {
+	if last["allow_vpc"] != true || last["allow_all_sites"] != true {
 		t.Fatalf("edited destinations mismatch: %#v", last)
 	}
 
-	// Apple .mobileconfig and Android .sswan downloads
-	res, body := e.do("GET", "/unduh/akun/3/apple.mobileconfig", nil, nil)
+	// C2S Configure modal & manual .conf, Apple .mobileconfig, Android .sswan downloads
+	_, uCfg := e.do("GET", "/akun/3/configure", nil, hx)
+	for _, want := range []string{"Configure Client C2S: poc-client", "192.0.2.10", "/unduh/akun/3/manual.conf", "/unduh/akun/3/windows.ps1", "/unduh/akun/3/vpnaas-ca.crt"} {
+		if !strings.Contains(uCfg, want) {
+			t.Errorf("user configure modal missing %q", want)
+		}
+	}
+	res, body := e.do("GET", "/unduh/akun/3/manual.conf", nil, nil)
+	if res.StatusCode != 200 || !strings.Contains(body, "[GATEWAY_SERVER]") || res.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("manual.conf: %d %q", res.StatusCode, body)
+	}
+	res, body = e.do("GET", "/unduh/akun/3/apple.mobileconfig", nil, nil)
 	if res.StatusCode != 200 || !strings.Contains(body, "<plist>") || res.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("mobileconfig: %d %q", res.StatusCode, body)
 	}
@@ -218,9 +254,21 @@ func TestV2GroupsRoutingPKITokensAndDiagnostics(t *testing.T) {
 	if res.StatusCode != 200 || len(e.api.certs) != 1 {
 		t.Fatalf("issue cert: %d", res.StatusCode)
 	}
+	res, body = e.do("GET", "/unduh/pki/ca.crt", nil, nil)
+	if res.StatusCode != 200 || !strings.Contains(body, "BEGIN CERTIFICATE") {
+		t.Fatalf("ca.crt: %d", res.StatusCode)
+	}
 	res, body = e.do("GET", "/unduh/pki/ca.pem", nil, nil)
 	if res.StatusCode != 200 || !strings.Contains(body, "BEGIN CERTIFICATE") {
 		t.Fatalf("ca.pem: %d", res.StatusCode)
+	}
+	res, body = e.do("GET", "/unduh/pki/certs/23/cert.crt", nil, nil)
+	if res.StatusCode != 200 || !strings.Contains(body, "BEGIN CERTIFICATE") {
+		t.Fatalf("cert.crt: %d", res.StatusCode)
+	}
+	res, body = e.do("GET", "/unduh/pki/certs/23/key.key", nil, nil)
+	if res.StatusCode != 200 || !strings.Contains(body, "BEGIN PRIVATE KEY") {
+		t.Fatalf("key.key: %d", res.StatusCode)
 	}
 	res, body = e.do("GET", "/unduh/pki/certs/23/bundle.p12", nil, nil)
 	if res.StatusCode != 200 || body != "PK12DATA" {
@@ -254,10 +302,37 @@ func TestV2GroupsRoutingPKITokensAndDiagnostics(t *testing.T) {
 	if res.StatusCode != 200 || !strings.Contains(body, "[REDACTED]") {
 		t.Fatalf("logs: %d %s", res.StatusCode, body)
 	}
+}
 
-	// Hub multi-vendor download works on legacy VPN Hub too
-	res, body = e.do("GET", "/unduh/koneksi/7/site-a/mikrotik.rsc", nil, nil)
-	if res.StatusCode != 200 || !strings.Contains(body, "mikrotik") || res.Header.Get("Content-Disposition") != `attachment; filename="Hub-kantor-Site-A.rsc"` {
-		t.Fatalf("hub mikrotik: %d %q %v", res.StatusCode, body, res.Header)
+func TestAuditRegressionCertFormErrorsAndValidation(t *testing.T) {
+	e := setup(t)
+	e.login()
+
+	// 1. SiteForm shows cert_id error clearly when auth_method=pubkey and no site cert exists
+	res, body := e.do("POST", "/sites", url.Values{
+		"name": {"site-x509"}, "subnets": {"192.168.90.0/24"}, "auth_method": {"pubkey"}, "enabled": {"on"},
+	}, e.safe())
+	if res.StatusCode != 200 || !strings.Contains(body, "Sertifikat site wajib dipilih") {
+		t.Fatalf("site pubkey validation error not rendered: %d %s", res.StatusCode, body)
+	}
+
+	// 2. When a user X.509 cert exists, UserForm password input must NOT have HTML5 required attribute so pubkey/eap-tls users can submit
+	e.api.certs = []map[string]any{
+		{"id": 50.0, "name": "alice-x509", "san": "alice@corp.id", "target_type": "user", "serial": "AA11", "revoked": false},
+	}
+	_, uForm := e.do("GET", "/akun/baru", nil, hx)
+	if strings.Contains(uForm, `name="password" autocomplete="new-password" placeholder="Wajib untuk EAP-MSCHAPv2 (kosongkan jika pakai X.509/EAP-TLS)" required`) {
+		t.Fatalf("password input must not force HTML5 required when user certs exist: %s", uForm)
+	}
+	if !strings.Contains(uForm, "alice-x509") {
+		t.Fatalf("user cert option missing from create form")
+	}
+
+	// 3. PolicyForm renders source_ref / destination_ref validation errors visibly
+	res, pBody := e.do("POST", "/kebijakan", url.Values{
+		"name": {"bad-ref"}, "source_type": {"site"}, "source_ref": {""}, "destination_type": {"site"}, "destination_ref": {""}, "protocol": {"all"},
+	}, e.safe())
+	if res.StatusCode != 200 || !strings.Contains(pBody, "Pilih entitas source") || !strings.Contains(pBody, "Pilih site tujuan") {
+		t.Fatalf("policy ref validation errors not rendered: %d %s", res.StatusCode, pBody)
 	}
 }

@@ -31,7 +31,9 @@ func (s *Server) routesV2() {
 	s.mux.HandleFunc("POST /sites/{id}/disconnect", s.mutating(s.multiSiteAction("disconnect")))
 	s.mux.HandleFunc("GET /unduh/sites/{id}/{vendor}", s.authed(s.downloadMultiSiteConfig))
 
-	// C2S explicit session disconnect
+	// C2S configure modal, manual .conf & explicit session disconnect
+	s.mux.HandleFunc("GET /akun/{id}/configure", s.authed(s.userConfigure))
+	s.mux.HandleFunc("GET /unduh/akun/{id}/manual.conf", s.authed(s.downloadUserFormat("manual", "text/plain; charset=utf-8", "VPNaaS-Client-", ".conf")))
 	s.mux.HandleFunc("POST /akun/{id}/disconnect", s.mutating(s.disconnectUserAll))
 	s.mux.HandleFunc("POST /akun/{id}/sesi/{ike_id}/disconnect", s.mutating(s.disconnectUserOne))
 
@@ -62,8 +64,11 @@ func (s *Server) routesV2() {
 	s.mux.HandleFunc("POST /pki/certs", s.mutating(s.issueCert))
 	s.mux.HandleFunc("POST /pki/certs/{id}/revoke", s.mutating(s.revokeCert))
 	s.mux.HandleFunc("POST /pki/server/rotate", s.mutating(s.rotateServerCert))
+	s.mux.HandleFunc("GET /unduh/pki/ca.crt", s.authed(s.downloadPKIFileQuery("pki/ca/cert", "format=crt", "vpnaas-ca.crt", "application/x-x509-ca-cert")))
 	s.mux.HandleFunc("GET /unduh/pki/ca.pem", s.authed(s.downloadPKIFile("pki/ca/cert", "vpnaas-ca.pem", "application/x-pem-file")))
 	s.mux.HandleFunc("GET /unduh/pki/ca.crl", s.authed(s.downloadPKIFile("pki/crl", "vpnaas-ca.crl", "application/pkix-crl")))
+	s.mux.HandleFunc("GET /unduh/pki/certs/{id}/cert.crt", s.authed(s.downloadCertBundle("crt", "application/x-x509-ca-cert", ".crt")))
+	s.mux.HandleFunc("GET /unduh/pki/certs/{id}/key.key", s.authed(s.downloadCertBundle("key", "application/x-pem-file", ".key")))
 	s.mux.HandleFunc("GET /unduh/pki/certs/{id}/bundle.json", s.authed(s.downloadCertBundle("pem", "application/json", "-bundle.json")))
 	s.mux.HandleFunc("GET /unduh/pki/certs/{id}/bundle.p12", s.authed(s.downloadCertBundle("p12", "application/x-pkcs12", ".p12")))
 
@@ -167,8 +172,15 @@ func (s *Server) populateUserFormChoices(r *http.Request, f *views.Form) {
 	f.Sites = sites
 	f.Groups = groups
 	f.Certs = certs
-	if lan, ok := gw["lan_cidr"].(string); ok && lan != "" && lan != "192.0.2.0/24" {
-		f.VPCCIDR = lan
+	if vpcs, ok := gw["vpc_cidrs"].([]any); ok && len(vpcs) > 0 {
+		if first, ok := vpcs[0].(string); ok && first != "" && first != "192.0.2.0/24" {
+			f.VPCCIDR = first
+		}
+	}
+	if f.VPCCIDR == "" {
+		if lan, ok := gw["lan_cidr"].(string); ok && lan != "" && lan != "192.0.2.0/24" {
+			f.VPCCIDR = lan
+		}
 	}
 }
 
@@ -181,6 +193,12 @@ func (s *Server) populateUserFormOptions(r *http.Request, f *views.Form) {
 		if row, err := s.findRecord(r, "users", f.ID); err == nil {
 			f.SelectedIDs["allowed_sites"] = extractIntSet(row, "allowed_sites")
 			f.SelectedIDs["groups"] = extractIntSet(row, "groups")
+			if av, ok := row["allow_vpc"].(bool); ok && av {
+				f.Values["allow_vpc"] = "on"
+			}
+			if aa, ok := row["allow_all_sites"].(bool); ok && aa {
+				f.Values["allow_all_sites"] = "on"
+			}
 		}
 	}
 }
@@ -216,7 +234,7 @@ func (s *Server) siteTable(r *http.Request, flash *views.Flash) views.SiteTable 
 	q := r.URL.Query().Get("q")
 	t := views.SiteTable{Total: len(sites), Query: q, Err: errText(err), Flash: flash, SiteNames: names}
 	for _, st := range sites {
-		if model.Matches(q, st.Name, st.Address, st.IKEID, string(st.Subnets), string(st.HubLocalTS), st.StatusLabel(), st.AuthLabel()) {
+		if model.Matches(q, st.Name, st.Address, st.IKEID, string(st.Subnets), string(st.HubLocalTS), st.StatusLabel(), st.OnlineLabel(), st.LastConnectedAt, st.AuthLabel()) {
 			t.Rows = append(t.Rows, st)
 		}
 	}
@@ -229,7 +247,7 @@ func (s *Server) sitesPage(w http.ResponseWriter, r *http.Request, sess auth.Ses
 		render(w, r, views.SitesTable(t))
 		return
 	}
-	s.page(w, r, sess, "sites", "Multi-Site S2S", views.SitesPage(t))
+	s.page(w, r, sess, "sites", "Site-to-Site (S2S)", views.SitesPage(t))
 }
 
 func (s *Server) populateSiteFormOptions(r *http.Request, f *views.Form) {
@@ -323,11 +341,26 @@ func (s *Server) siteConfigure(w http.ResponseWriter, r *http.Request, _ auth.Se
 	ctx, cancel := s.ctx(r)
 	defer cancel()
 	var sites []model.MultiSite
-	_, err := s.up.JSON(ctx, "GET", "sites", nil, &sites)
+	var certs []model.CertRecord
+	var gw map[string]any
+	var err error
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() { defer wg.Done(); _, err = s.up.JSON(ctx, "GET", "sites", nil, &sites) }()
+	go func() { defer wg.Done(); _, _ = s.up.JSON(ctx, "GET", "gateway", nil, &gw) }()
+	go func() { defer wg.Done(); _, _ = s.up.JSON(ctx, "GET", "pki/certs", nil, &certs) }()
+	wg.Wait()
 	data := views.SiteConfigureData{Err: errText(err)}
+	if ip, ok := gw["public_ip"].(string); ok {
+		data.HubPublicIP = ip
+	}
 	names := map[int]string{}
 	for _, st := range sites {
 		names[st.ID] = st.Name
+	}
+	certByID := map[int]model.CertRecord{}
+	for _, c := range certs {
+		certByID[c.ID] = c
 	}
 	for _, st := range sites {
 		if st.ID == id {
@@ -335,6 +368,12 @@ func (s *Server) siteConfigure(w http.ResponseWriter, r *http.Request, _ auth.Se
 			for _, pid := range st.PeerSites {
 				if n, ok := names[pid]; ok {
 					data.PeerNames = append(data.PeerNames, n)
+				}
+			}
+			if st.CertID != nil {
+				if c, ok := certByID[*st.CertID]; ok {
+					cc := c
+					data.Cert = &cc
 				}
 			}
 			render(w, r, views.SiteConfigureModal(data))
@@ -345,6 +384,52 @@ func (s *Server) siteConfigure(w http.ResponseWriter, r *http.Request, _ auth.Se
 		data.Err = "Site tidak ditemukan"
 	}
 	render(w, r, views.SiteConfigureModal(data))
+}
+
+func (s *Server) userConfigure(w http.ResponseWriter, r *http.Request, _ auth.Session) {
+	id, ok := pathID(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	ctx, cancel := s.ctx(r)
+	defer cancel()
+	var users []model.User
+	var certs []model.CertRecord
+	var gw map[string]any
+	var err error
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() { defer wg.Done(); _, err = s.up.JSON(ctx, "GET", "users", nil, &users) }()
+	go func() { defer wg.Done(); _, _ = s.up.JSON(ctx, "GET", "gateway", nil, &gw) }()
+	go func() { defer wg.Done(); _, _ = s.up.JSON(ctx, "GET", "pki/certs", nil, &certs) }()
+	wg.Wait()
+	siteNames, groupNames := s.lookupSiteGroupNames(r)
+	data := views.UserConfigureData{SiteNames: siteNames, GroupNames: groupNames, Err: errText(err)}
+	if ip, ok := gw["public_ip"].(string); ok {
+		data.HubPublicIP = ip
+	}
+	certByID := map[int]model.CertRecord{}
+	for _, c := range certs {
+		certByID[c.ID] = c
+	}
+	for _, u := range users {
+		if u.ID == id {
+			data.User = u
+			if u.CertID != nil {
+				if c, ok := certByID[*u.CertID]; ok {
+					cc := c
+					data.Cert = &cc
+				}
+			}
+			render(w, r, views.UserConfigureModal(data))
+			return
+		}
+	}
+	if data.Err == "" {
+		data.Err = "Akun tidak ditemukan"
+	}
+	render(w, r, views.UserConfigureModal(data))
 }
 
 func (s *Server) confirmMultiSiteDisconnect(w http.ResponseWriter, r *http.Request, _ auth.Session) {
@@ -389,7 +474,7 @@ func (s *Server) multiSiteAction(action string) handler {
 func (s *Server) downloadMultiSiteConfig(w http.ResponseWriter, r *http.Request, _ auth.Session) {
 	id, ok := pathID(r)
 	vendor := r.PathValue("vendor")
-	valid := map[string]bool{"swanctl": true, "script": true, "mikrotik": true, "fortigate": true, "cisco": true}
+	valid := map[string]bool{"generic": true, "swanctl": true, "script": true, "mikrotik": true, "fortigate": true, "cisco": true}
 	if !ok || !valid[vendor] {
 		jsonError(w, http.StatusNotFound, "Vendor config tidak dikenal")
 		return
@@ -734,10 +819,14 @@ func (s *Server) rotateServerCert(w http.ResponseWriter, r *http.Request, _ auth
 }
 
 func (s *Server) downloadPKIFile(upstreamPath, fname, ctype string) handler {
+	return s.downloadPKIFileQuery(upstreamPath, "", fname, ctype)
+}
+
+func (s *Server) downloadPKIFileQuery(upstreamPath, rawQuery, fname, ctype string) handler {
 	return func(w http.ResponseWriter, r *http.Request, _ auth.Session) {
 		ctx, cancel := s.ctx(r)
 		defer cancel()
-		res, err := s.up.Do(ctx, "GET", upstreamPath, "", nil, "")
+		res, err := s.up.Do(ctx, "GET", upstreamPath, rawQuery, nil, "")
 		if err != nil {
 			jsonError(w, http.StatusBadGateway, err.Error())
 			return
